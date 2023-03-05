@@ -7,6 +7,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
+	"golang.org/x/exp/slog"
 )
 
 type Conn struct {
@@ -16,7 +17,9 @@ type Conn struct {
 var connection *Conn
 
 func CreateConnection() error {
-	c, err := sqlx.Open("postgres", buildDSN())
+	dsn := buildDSN()
+	slog.Debug("connecting to postgres", slog.String("dsn", dsn))
+	c, err := sqlx.Open("postgres", dsn)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}

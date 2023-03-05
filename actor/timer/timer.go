@@ -1,7 +1,6 @@
 package timer
 
 import (
-	"log"
 	"time"
 
 	"github.com/0xa1-red/empires-of-avalon/persistence"
@@ -100,7 +99,6 @@ func (g *Grain) startTimer() {
 		}
 	}
 
-	log.Printf("%d", g.timer.Amount)
 	if g.timer.Amount == 0 {
 		g.timer = nil
 		return

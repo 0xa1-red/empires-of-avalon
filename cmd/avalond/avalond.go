@@ -58,6 +58,7 @@ func main() {
 	}
 
 	lookup := disthash.New()
+	slog.Debug("configuring remote", slog.String("host", viper.GetString(config.Node_Host)), slog.String("port", viper.GetString(config.Node_Port)))
 	remoteConfig := remote.Configure(viper.GetString(config.Node_Host), viper.GetInt(config.Node_Port))
 
 	inventoryKind := protobuf.NewInventoryKind(func() protobuf.Inventory {

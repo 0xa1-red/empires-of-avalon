@@ -28,8 +28,13 @@ var configs = []struct {
 	{HTTP_Address, "HTTP_ADDRESS", "0.0.0.0"},
 	{HTTP_Port, "HTTP_PORT", "8080"},
 	// Etcd
-	{ETCD_Endpoints, "ETCD_ENDPOINTS", "localhost:2379"},
+	{ETCD_Endpoints, "ETCD_ENDPOINTS", "127.0.0.1:2379"},
 	{ETCD_Root, "ETCD_ROOT", "/avalond"},
+	// NATS
+	{NATS_Host, "NATS_HOST", "127.0.0.1"},
+	{NATS_Port, "NATS_PORT", "4222"},
+	{NATS_User, "NATS_USER", ""},
+	{NATS_Password, "NATS_PASSWORD", ""},
 }
 
 func Setup() {
@@ -42,6 +47,7 @@ func Setup() {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("/etc/avalond")
+	viper.AddConfigPath("./testdata")
 	viper.AddConfigPath(".")
 
 	err := viper.ReadInConfig()

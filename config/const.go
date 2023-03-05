@@ -28,3 +28,10 @@ const (
 	ETCD_Endpoints = "ETCD.Endpoints"
 	ETCD_Root      = "ETCD.Root"
 )
+
+const (
+	NATS_Host     = "NATS.Host"
+	NATS_Port     = "NATS.Port"
+	NATS_User     = "NATS.User"
+	NATS_Password = "NATS.Password"
+)

@@ -39,7 +39,7 @@ func TestBuildURL(t *testing.T) {
 		},
 	}
 
-	config.Setup()
+	config.Setup("")
 
 	for i, tt := range tests {
 		tf := func(t *testing.T) {

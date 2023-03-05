@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -28,8 +29,13 @@ import (
 	"google.golang.org/grpc"
 )
 
+var configPath string
+
 func main() {
-	config.Setup()
+	flag.StringVar(&configPath, "config-file", "", "path to config file")
+	flag.Parse()
+
+	config.Setup(configPath)
 	logging.Setup()
 
 	if err := database.CreateConnection(); err != nil {

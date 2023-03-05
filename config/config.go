@@ -37,18 +37,22 @@ var configs = []struct {
 	{NATS_Password, "NATS_PASSWORD", ""},
 }
 
-func Setup() {
+func Setup(path string) {
 	for _, values := range configs {
 		viper.SetDefault(values.key, values.def)
 
 		viper.BindEnv(values.key, fmt.Sprintf("%s_%s", envPrefix, values.env)) // nolint
 	}
 
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath("/etc/avalond")
-	viper.AddConfigPath("./testdata")
-	viper.AddConfigPath(".")
+	if path == "" {
+		viper.SetConfigName("config")
+		viper.SetConfigType("yaml")
+		viper.AddConfigPath("/etc/avalond")
+		viper.AddConfigPath("./testdata")
+		viper.AddConfigPath(".")
+	} else {
+		viper.SetConfigFile(path)
+	}
 
 	err := viper.ReadInConfig()
 	if err != nil {

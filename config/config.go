@@ -11,7 +11,7 @@ import (
 var configs = []struct {
 	key string
 	env string
-	def string
+	def interface{}
 }{
 	// Postgres
 	{PG_User, "POSTGRES_USER", "postgres"},
@@ -22,6 +22,11 @@ var configs = []struct {
 	{PG_SSLMode, "POSTGRESS_SSLMODE", "disable"},
 	// Cluster
 	{Cluster_Name, "CLUSTER_NAME", "avalond"},
+	{Node_Host, "CLUSTER_NODE_HOST", "0.0.0.0"},
+	{Node_Port, "CLUSTER_NODE_PORT", 0},
+	// HTTP
+	{HTTP_Address, "HTTP_ADDRESS", "0.0.0.0"},
+	{HTTP_Port, "HTTP_PORT", "8080"},
 }
 
 func Setup() {

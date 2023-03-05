@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -19,10 +20,9 @@ import (
 	"github.com/asynkron/protoactor-go/cluster/clusterproviders/automanaged"
 	"github.com/asynkron/protoactor-go/cluster/identitylookup/disthash"
 	"github.com/asynkron/protoactor-go/remote"
+	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 )
-
-const testID = "e85d91f4-e56f-4ebc-9be8-c0eb107ceed0"
 
 func main() {
 	config.Setup()
@@ -39,7 +39,7 @@ func main() {
 	system := actor.NewActorSystem()
 	provider := automanaged.New()
 	lookup := disthash.New()
-	remoteConfig := remote.Configure("localhost", 0)
+	remoteConfig := remote.Configure(viper.GetString(config.Node_Host), viper.GetInt(config.Node_Port))
 
 	inventoryKind := protobuf.NewInventoryKind(func() protobuf.Inventory {
 		return &inventory.Grain{}
@@ -49,7 +49,7 @@ func main() {
 		return &timer.Grain{}
 	}, 0)
 
-	clusterConfig := cluster.Configure("vslice-1", provider, lookup, remoteConfig,
+	clusterConfig := cluster.Configure(viper.GetString(config.Cluster_Name), provider, lookup, remoteConfig,
 		cluster.WithKinds(inventoryKind, timerKind))
 
 	c := cluster.New(system, clusterConfig)
@@ -67,17 +67,14 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	go startServer(wg, ":8080")
+	bindAddress := fmt.Sprintf("%s:%s",
+		viper.GetString(config.HTTP_Address),
+		viper.GetString(config.HTTP_Port))
+	go startServer(wg, bindAddress)
 
-MainLoop:
-	for {
-		select {
-		case <-sigs:
-			break MainLoop
-		}
-	}
+	<-sigs
 
-	server.Shutdown(context.Background())
+	server.Shutdown(context.Background()) // nolint
 	wg.Wait()
 	c.Shutdown(true)
 }

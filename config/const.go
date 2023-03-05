@@ -15,6 +15,8 @@ const (
 
 const (
 	Cluster_Name = "Cluster.Name"
+	Node_Host    = "Cluster.Node.Host"
+	Node_Port    = "Cluster.Node.Port"
 )
 
 const (

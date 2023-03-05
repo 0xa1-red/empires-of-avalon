@@ -35,6 +35,8 @@ var configs = []struct {
 	{NATS_Port, "NATS_PORT", "4222"},
 	{NATS_User, "NATS_USER", ""},
 	{NATS_Password, "NATS_PASSWORD", ""},
+	// Logging
+	{Logging_Level, "LOGGING_LEVEL", "info"},
 }
 
 func Setup(path string) {

@@ -35,3 +35,7 @@ const (
 	NATS_User     = "NATS.User"
 	NATS_Password = "NATS.Password"
 )
+
+const (
+	Logging_Level = "Logging.Level"
+)

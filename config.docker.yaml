@@ -1,0 +1,27 @@
+---
+postgres:
+  user: "root"
+  password: ""
+  host: "127.0.0.1"
+  port: "26257"
+  database: "defaultdb"
+  sslmode: "disable"
+cluster:
+  name: "avalond-dev"
+  node:
+    host: "127.0.0.1"
+    port: 52479
+http:
+  address: "0.0.0.0"
+  port: "8080"
+etcd:
+  endpoints:
+    - 127.0.0.1:22379
+  root: "avalond-dev"
+nats:
+  host: 127.0.0.1
+  port: 4222
+  user: ""
+  password: ""
+logging:
+  level: debug

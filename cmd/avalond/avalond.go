@@ -3,9 +3,11 @@ package main
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
 	"github.com/0xa1-red/empires-of-avalon/actor/inventory"
 	"github.com/0xa1-red/empires-of-avalon/actor/timer"
@@ -17,11 +19,13 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/actor"
 	"github.com/asynkron/protoactor-go/cluster"
-	"github.com/asynkron/protoactor-go/cluster/clusterproviders/automanaged"
+	"github.com/asynkron/protoactor-go/cluster/clusterproviders/etcd"
 	"github.com/asynkron/protoactor-go/cluster/identitylookup/disthash"
 	"github.com/asynkron/protoactor-go/remote"
 	"github.com/spf13/viper"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"golang.org/x/exp/slog"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -37,7 +41,16 @@ func main() {
 	signal.Notify(sigs, os.Interrupt)
 
 	system := actor.NewActorSystem()
-	provider := automanaged.New()
+
+	provider, err := etcd.NewWithConfig(viper.GetString(config.ETCD_Root), clientv3.Config{
+		Endpoints:   viper.GetStringSlice(config.ETCD_Endpoints),
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{grpc.WithBlock()},
+	})
+	if err != nil {
+		log.Fatalf("error creating etcd provider: %v", err)
+	}
+
 	lookup := disthash.New()
 	remoteConfig := remote.Configure(viper.GetString(config.Node_Host), viper.GetInt(config.Node_Port))
 

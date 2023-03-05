@@ -27,6 +27,9 @@ var configs = []struct {
 	// HTTP
 	{HTTP_Address, "HTTP_ADDRESS", "0.0.0.0"},
 	{HTTP_Port, "HTTP_PORT", "8080"},
+	// Etcd
+	{ETCD_Endpoints, "ETCD_ENDPOINTS", "localhost:2379"},
+	{ETCD_Root, "ETCD_ROOT", "/avalond"},
 }
 
 func Setup() {

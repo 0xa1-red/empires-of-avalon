@@ -23,3 +23,8 @@ const (
 	HTTP_Address = "HTTP.Address"
 	HTTP_Port    = "HTTP.Port"
 )
+
+const (
+	ETCD_Endpoints = "ETCD.Endpoints"
+	ETCD_Root      = "ETCD.Root"
+)

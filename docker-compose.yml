@@ -1,0 +1,28 @@
+version: '3'
+
+services:
+  nats:
+    image: nats:latest
+    ports:
+      - 4222:4222
+      - 6222:6222
+      - 8222:8222
+  roach:
+    image: cockroachdb/cockroach:v22.1.10
+    ports:
+      - 26257:26257
+      - 8088:8080
+    volumes:
+      - roach-data:/cockroach/cockroach-data
+      - ./init/:/docker-entrypoint-initdb.d/
+    command: "start-single-node --insecure"
+    healthcheck:
+      test: [ "curl", "http://localhost:8080/health" ]
+      interval: 1m30s
+      timeout: 30s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  roach-data:
+    driver: local

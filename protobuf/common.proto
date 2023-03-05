@@ -1,0 +1,83 @@
+syntax = "proto3";
+package proto;
+option go_package = "github.com/alfreddobradi/verbose-spork/protobuf";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+message Empty {}
+
+enum Status {
+    Unknown = 0;
+    OK = 1;
+    Error = 2;
+}
+
+message StartRequest {
+    string Name = 1;
+    int64 Amount = 2;
+    google.protobuf.Timestamp Timestamp = 3;
+}
+
+message StartResponse {
+    Status Status = 1;
+    string Error = 2;
+    google.protobuf.Timestamp Timestamp = 3;
+}
+
+message FinishResponse {
+    Status Status = 1;
+    string Error = 2;
+    google.protobuf.Timestamp Timestamp = 3;
+}
+
+message TimerRequest {
+    string TraceID = 1;
+    string BuildID = 2;
+    string Reply = 3;
+    string Duration = 4;
+    int64 Amount = 5;
+    google.protobuf.Struct Data = 6;
+    google.protobuf.Timestamp Timestamp = 7;
+}
+
+message TimerResponse {
+    Status Status = 1;
+    string Error = 2;
+    google.protobuf.Timestamp Deadline = 3;
+    google.protobuf.Timestamp Timestamp = 4;
+}
+
+message TimerFired {
+    google.protobuf.Timestamp Timestamp = 1;
+    google.protobuf.Struct Data = 2;
+}
+
+message DescribeInventoryRequest {
+    string TraceID = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+}
+
+message DescribeInventoryResponse {
+    google.protobuf.Struct Inventory = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+}
+
+message RestoreRequest {
+    bytes Data = 1;
+}
+
+message RestoreResponse {
+    Status Status = 1;
+    string Error = 2;
+}
+
+service Inventory {
+    rpc Start (StartRequest) returns (StartResponse);
+    rpc Describe (DescribeInventoryRequest) returns (DescribeInventoryResponse);
+    rpc Restore (RestoreRequest) returns (RestoreResponse);
+}
+
+service Timer {
+    rpc CreateTimer (TimerRequest) returns (TimerResponse);
+    rpc Restore (RestoreRequest) returns (RestoreResponse);
+}

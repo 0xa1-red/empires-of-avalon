@@ -25,8 +25,8 @@ import (
 const testID = "e85d91f4-e56f-4ebc-9be8-c0eb107ceed0"
 
 func main() {
-	logging.Setup()
 	config.Setup()
+	logging.Setup()
 
 	if err := database.CreateConnection(); err != nil {
 		slog.Error("failed to connect to database", err)

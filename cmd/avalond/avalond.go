@@ -8,8 +8,10 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/actor/inventory"
 	"github.com/0xa1-red/empires-of-avalon/actor/timer"
+	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/database"
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
+	"github.com/0xa1-red/empires-of-avalon/logging"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/actor"
@@ -23,7 +25,8 @@ import (
 const testID = "e85d91f4-e56f-4ebc-9be8-c0eb107ceed0"
 
 func main() {
-	setLogging()
+	logging.Setup()
+	config.Setup()
 
 	if err := database.CreateConnection(); err != nil {
 		slog.Error("failed to connect to database", err)

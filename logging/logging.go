@@ -1,4 +1,4 @@
-package main
+package logging
 
 import (
 	"os"
@@ -6,7 +6,7 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-func setLogging() {
+func Setup() {
 	opts := slog.HandlerOptions{
 		Level: slog.LevelDebug,
 	}

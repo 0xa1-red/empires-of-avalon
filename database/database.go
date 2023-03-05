@@ -2,10 +2,11 @@ package database
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
+	"github.com/spf13/viper"
 )
 
 type Conn struct {
@@ -15,12 +16,7 @@ type Conn struct {
 var connection *Conn
 
 func CreateConnection() error {
-	url := os.Getenv("GAME_POSTGRES_URL")
-	if url == "" {
-		url = "postgres://postgres@127.0.0.1:5432/defaultdb?sslmode=disable"
-	}
-
-	c, err := sqlx.Open("postgres", url)
+	c, err := sqlx.Open("postgres", buildDSN())
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
@@ -38,4 +34,18 @@ func Connection() *Conn {
 		CreateConnection()
 	}
 	return connection
+}
+
+func buildDSN() string {
+	user := viper.GetString(config.PG_User)
+	if pwd := viper.GetString(config.PG_Passwd); pwd != "" {
+		user = fmt.Sprintf("%s:%s", user, pwd)
+	}
+	return fmt.Sprintf("postgres://%s@%s:%s/%s?sslmode=%s",
+		user,
+		viper.GetString(config.PG_Host),
+		viper.GetString(config.PG_Port),
+		viper.GetString(config.PG_DB),
+		viper.GetString(config.PG_SSLMode),
+	)
 }

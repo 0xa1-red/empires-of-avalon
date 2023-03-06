@@ -14,6 +14,7 @@ func (g *Grain) Encode() ([]byte, error) {
 	data := make(map[string]interface{})
 
 	data["buildings"] = g.buildings
+	data["resources"] = g.resources
 	encode["data"] = data
 	encode["identity"] = g.ctx.Identity()
 
@@ -37,7 +38,8 @@ func (g *Grain) Decode(b []byte) error {
 		return err
 	}
 
-	g.buildings = m["buildings"].(map[common.Building]*BuildingRegister)
+	g.buildings = m["buildings"].(map[common.BuildingName]*BuildingRegister)
+	g.resources = m["resources"].(map[common.ResourceName]*ResourceRegister)
 
 	return nil
 }
@@ -64,6 +66,6 @@ func (g *Grain) Restore(req *protobuf.RestoreRequest, ctx cluster.GrainContext) 
 }
 
 func init() {
-	m := make(map[common.Building]*BuildingRegister)
+	m := make(map[common.BuildingName]*BuildingRegister)
 	gob.Register(m)
 }

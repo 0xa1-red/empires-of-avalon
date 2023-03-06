@@ -1,9 +1,5 @@
 package common
 
-import (
-	"encoding/gob"
-)
-
 type BuildingName string
 
 const (
@@ -11,14 +7,14 @@ const (
 )
 
 var Buildings map[BuildingName]Building = map[BuildingName]Building{
-	House: {Name: House, BuildTime: "10s"},
+	House: {Name: House, BuildTime: "60s", Cost: []*ResourceCost{
+		{Resource: Wood, Amount: 100, Permanent: true},
+		{Resource: Population, Amount: 5, Permanent: false},
+	}},
 }
 
 type Building struct {
 	Name      BuildingName
 	BuildTime string
-}
-
-func init() {
-	gob.Register(Buildings)
+	Cost      []*ResourceCost
 }

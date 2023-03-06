@@ -20,15 +20,25 @@ import (
 type BuildingRegister struct {
 	mx *sync.Mutex
 
+	Name     common.BuildingName
 	Amount   int
 	Queue    int
 	Finished time.Time
 }
 
+type ResourceRegister struct {
+	mx *sync.Mutex
+
+	Name     common.ResourceName
+	Amount   int
+	Reserved int
+}
+
 type Grain struct {
 	ctx cluster.GrainContext
 
-	buildings    map[common.Building]*BuildingRegister
+	buildings    map[common.BuildingName]*BuildingRegister
+	resources    map[common.ResourceName]*ResourceRegister
 	replySubject string
 	subscription *nats.Subscription
 }
@@ -37,7 +47,10 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
 	label := fmt.Sprintf("%s-subject", ctx.Identity())
 	g.replySubject = uuid.NewSHA1(uuid.NameSpaceOID, []byte(label)).String()
-	g.buildings = make(map[common.Building]*BuildingRegister)
+
+	// TODO find a better way to only populate if user is new
+	g.buildings = getStartingBuildings()
+	g.resources = getStartingResources()
 
 	cb := func(t *protobuf.TimerFired) {
 		payload := t.Data.AsMap()
@@ -48,8 +61,8 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 			return
 		}
 		slog.Debug("finished building", "building", building.Name)
-		g.buildings[building].Amount += 1
-		g.buildings[building].Queue -= 1
+		g.buildings[building.Name].Amount += 1
+		g.buildings[building.Name].Queue -= 1
 	}
 
 	sub, err := intnats.GetConnection().Subscribe(g.replySubject, cb)
@@ -85,12 +98,13 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 			Timestamp: timestamppb.Now(),
 		}, nil
 	}
-	if _, ok := g.buildings[b]; !ok {
-		g.buildings[b] = &BuildingRegister{
-			mx: &sync.Mutex{},
+	if _, ok := g.buildings[b.Name]; !ok {
+		g.buildings[b.Name] = &BuildingRegister{
+			mx:   &sync.Mutex{},
+			Name: b.Name,
 		}
 	}
-	if g.buildings[b].Queue > 0 {
+	if g.buildings[b.Name].Queue > 0 {
 		return &protobuf.StartResponse{
 			Status:    protobuf.Status_Error,
 			Error:     fmt.Sprintf("Building is already in progress: %s", req.Name),
@@ -127,13 +141,13 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		slog.Time("timestamp", res.Timestamp.AsTime()),
 	)
 
-	g.buildings[b].Queue += int(req.Amount)
+	g.buildings[b.Name].Queue += int(req.Amount)
 	d, _ := time.ParseDuration(b.BuildTime)
 	start := time.Now()
 	for r := req.Amount; r > 0; r-- {
 		start = start.Add(d)
 	}
-	g.buildings[b].Finished = start
+	g.buildings[b.Name].Finished = start
 
 	return &protobuf.StartResponse{
 		Status:    protobuf.Status_OK,
@@ -142,10 +156,11 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 }
 
 func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.GrainContext) (*protobuf.DescribeInventoryResponse, error) {
-	values := make(map[string]*structpb.Value)
+	buildingValues := make(map[string]*structpb.Value)
+	resourceValues := make(map[string]*structpb.Value)
 
 	for building, meta := range g.buildings {
-		values[string(building.Name)] = structpb.NewStructValue(&structpb.Struct{
+		buildingValues[string(building)] = structpb.NewStructValue(&structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"amount": structpb.NewNumberValue(float64(meta.Amount)),
 				"queue":  structpb.NewNumberValue(float64(meta.Queue)),
@@ -154,10 +169,22 @@ func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.Grain
 		})
 	}
 
+	for resource, meta := range g.resources {
+		resourceValues[string(resource)] = structpb.NewStructValue(&structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"amount":   structpb.NewNumberValue(float64(meta.Amount)),
+				"reserved": structpb.NewNumberValue(float64(meta.Reserved)),
+			},
+		})
+	}
+
 	inventory := &structpb.Struct{
 		Fields: map[string]*structpb.Value{
 			"buildings": structpb.NewStructValue(&structpb.Struct{
-				Fields: values,
+				Fields: buildingValues,
+			}),
+			"resources": structpb.NewStructValue(&structpb.Struct{
+				Fields: resourceValues,
 			}),
 		},
 	}
@@ -166,4 +193,46 @@ func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.Grain
 		Inventory: inventory,
 		Timestamp: timestamppb.Now(),
 	}, nil
+}
+
+func getStartingResources() map[common.ResourceName]*ResourceRegister {
+	registers := make(map[common.ResourceName]*ResourceRegister)
+
+	for name := range common.Resources {
+		registers[name] = &ResourceRegister{
+			mx:       &sync.Mutex{},
+			Name:     name,
+			Amount:   0,
+			Reserved: 0,
+		}
+	}
+
+	registers[common.Population] = newResourceRegister(common.Population, 5)
+	registers[common.Wood] = newResourceRegister(common.Wood, 100)
+
+	return registers
+}
+
+func getStartingBuildings() map[common.BuildingName]*BuildingRegister {
+	registers := make(map[common.BuildingName]*BuildingRegister)
+
+	for name := range common.Buildings {
+		registers[name] = &BuildingRegister{
+			mx:     &sync.Mutex{},
+			Name:   name,
+			Amount: 0,
+			Queue:  0,
+		}
+	}
+
+	return registers
+}
+
+func newResourceRegister(name common.ResourceName, amount int) *ResourceRegister {
+	return &ResourceRegister{
+		mx:       &sync.Mutex{},
+		Name:     name,
+		Amount:   amount,
+		Reserved: 0,
+	}
 }

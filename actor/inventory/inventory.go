@@ -121,7 +121,11 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		}, nil
 	}
 
-	slog.Info("Timer response: %#v", res)
+	slog.Info("timer response",
+		slog.Int("status", int(res.Status)),
+		slog.Time("deadline", res.Deadline.AsTime()),
+		slog.Time("timestamp", res.Timestamp.AsTime()),
+	)
 
 	g.buildings[b].Queue += int(req.Amount)
 	d, _ := time.ParseDuration(b.BuildTime)

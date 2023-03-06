@@ -2,28 +2,41 @@ package main
 
 import (
 	"context"
+	"flag"
+	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
+	"time"
 
 	"github.com/0xa1-red/empires-of-avalon/actor/inventory"
 	"github.com/0xa1-red/empires-of-avalon/actor/timer"
+	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/database"
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
+	"github.com/0xa1-red/empires-of-avalon/logging"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/actor"
 	"github.com/asynkron/protoactor-go/cluster"
-	"github.com/asynkron/protoactor-go/cluster/clusterproviders/automanaged"
+	"github.com/asynkron/protoactor-go/cluster/clusterproviders/etcd"
 	"github.com/asynkron/protoactor-go/cluster/identitylookup/disthash"
 	"github.com/asynkron/protoactor-go/remote"
+	"github.com/spf13/viper"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"golang.org/x/exp/slog"
+	"google.golang.org/grpc"
 )
 
-const testID = "e85d91f4-e56f-4ebc-9be8-c0eb107ceed0"
+var configPath string
 
 func main() {
-	setLogging()
+	flag.StringVar(&configPath, "config-file", "", "path to config file")
+	flag.Parse()
+
+	config.Setup(configPath)
+	logging.Setup()
 
 	if err := database.CreateConnection(); err != nil {
 		slog.Error("failed to connect to database", err)
@@ -34,9 +47,19 @@ func main() {
 	signal.Notify(sigs, os.Interrupt)
 
 	system := actor.NewActorSystem()
-	provider := automanaged.New()
+
+	provider, err := etcd.NewWithConfig(viper.GetString(config.ETCD_Root), clientv3.Config{
+		Endpoints:   viper.GetStringSlice(config.ETCD_Endpoints),
+		DialTimeout: 5 * time.Second,
+		DialOptions: []grpc.DialOption{grpc.WithBlock()},
+	})
+	if err != nil {
+		log.Fatalf("error creating etcd provider: %v", err)
+	}
+
 	lookup := disthash.New()
-	remoteConfig := remote.Configure("localhost", 0)
+	slog.Debug("configuring remote", slog.String("host", viper.GetString(config.Node_Host)), slog.String("port", viper.GetString(config.Node_Port)))
+	remoteConfig := remote.Configure(viper.GetString(config.Node_Host), viper.GetInt(config.Node_Port))
 
 	inventoryKind := protobuf.NewInventoryKind(func() protobuf.Inventory {
 		return &inventory.Grain{}
@@ -46,7 +69,7 @@ func main() {
 		return &timer.Grain{}
 	}, 0)
 
-	clusterConfig := cluster.Configure("vslice-1", provider, lookup, remoteConfig,
+	clusterConfig := cluster.Configure(viper.GetString(config.Cluster_Name), provider, lookup, remoteConfig,
 		cluster.WithKinds(inventoryKind, timerKind))
 
 	c := cluster.New(system, clusterConfig)
@@ -64,17 +87,14 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
-	go startServer(wg, ":8080")
+	bindAddress := fmt.Sprintf("%s:%s",
+		viper.GetString(config.HTTP_Address),
+		viper.GetString(config.HTTP_Port))
+	go startServer(wg, bindAddress)
 
-MainLoop:
-	for {
-		select {
-		case <-sigs:
-			break MainLoop
-		}
-	}
+	<-sigs
 
-	server.Shutdown(context.Background())
+	server.Shutdown(context.Background()) // nolint
 	wg.Wait()
 	c.Shutdown(true)
 }

@@ -2,6 +2,7 @@ package inventory
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -63,6 +64,13 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		slog.Debug("finished building", "building", building.Name)
 		g.buildings[building.Name].Amount += 1
 		g.buildings[building.Name].Queue -= 1
+
+		for _, cost := range building.Cost {
+			if !cost.Permanent {
+				g.resources[cost.Resource].Amount += g.resources[cost.Resource].Reserved
+			}
+			g.resources[cost.Resource].Reserved = 0
+		}
 	}
 
 	sub, err := intnats.GetConnection().Subscribe(g.replySubject, cb)
@@ -104,6 +112,29 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 			Name: b.Name,
 		}
 	}
+
+	insufficient := make([]string, 0)
+	for _, cost := range b.Cost {
+		if g.resources[cost.Resource].Amount < cost.Amount {
+			insufficient = append(insufficient, string(cost.Resource))
+		}
+	}
+
+	if len(insufficient) > 0 {
+		return &protobuf.StartResponse{
+			Status:    protobuf.Status_Error,
+			Error:     fmt.Sprintf("Insufficient resources: %s", strings.Join(insufficient, ", ")),
+			Timestamp: timestamppb.Now(),
+		}, nil
+	}
+
+	logFields := []any{"name", string(b.Name)}
+	for _, cost := range b.Cost {
+		g.resources[cost.Resource].Amount -= cost.Amount
+		g.resources[cost.Resource].Reserved = cost.Amount
+		logFields = append(logFields, string(cost.Resource), cost.Amount)
+	}
+
 	if g.buildings[b.Name].Queue > 0 {
 		return &protobuf.StartResponse{
 			Status:    protobuf.Status_Error,
@@ -112,7 +143,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		}, nil
 	}
 
-	slog.Info("requested building", "name", string(b.Name))
+	slog.Info("requested building", logFields...)
 
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{

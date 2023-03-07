@@ -39,3 +39,10 @@ const (
 const (
 	Logging_Level = "Logging.Level"
 )
+
+const (
+	Persistence_Encoding = "Persistence.Encoding"
+
+	EncodingGob  = "gob"
+	EncodingJson = "json"
+)

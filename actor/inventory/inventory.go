@@ -113,6 +113,18 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		}
 	}
 
+	queue := 0
+	for _, b := range g.buildings {
+		queue += b.Queue
+	}
+	if queue > 0 {
+		return &protobuf.StartResponse{
+			Status:    protobuf.Status_Error,
+			Error:     "All building slots are occupied",
+			Timestamp: timestamppb.Now(),
+		}, nil
+	}
+
 	insufficient := make([]string, 0)
 	for _, cost := range b.Cost {
 		if g.resources[cost.Resource].Amount < cost.Amount {
@@ -133,14 +145,6 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		g.resources[cost.Resource].Amount -= cost.Amount
 		g.resources[cost.Resource].Reserved = cost.Amount
 		logFields = append(logFields, string(cost.Resource), cost.Amount)
-	}
-
-	if g.buildings[b.Name].Queue > 0 {
-		return &protobuf.StartResponse{
-			Status:    protobuf.Status_Error,
-			Error:     fmt.Sprintf("Building is already in progress: %s", req.Name),
-			Timestamp: timestamppb.Now(),
-		}, nil
 	}
 
 	slog.Info("requested building", logFields...)

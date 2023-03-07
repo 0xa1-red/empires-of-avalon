@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/jmoiron/sqlx"
@@ -34,7 +35,10 @@ func CreateConnection() error {
 
 func Connection() *Conn {
 	if connection == nil {
-		CreateConnection()
+		if err := CreateConnection(); err != nil {
+			slog.Error("failed to connect to database", err)
+			os.Exit(1)
+		}
 	}
 	return connection
 }

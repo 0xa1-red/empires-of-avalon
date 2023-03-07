@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net/http"
-	"strconv"
 	"sync"
 
 	"github.com/0xa1-red/empires-of-avalon/common"
@@ -60,12 +59,14 @@ func startServer(wg *sync.WaitGroup, addr string) {
 		auth := r.Header.Get("Authorization")
 		building := r.URL.Query().Get("building")
 
-		amount := r.URL.Query().Get("amount")
-		amt, err := strconv.ParseInt(amount, 10, 64)
-		if err != nil {
-			slog.Error("failed to parse amount", err)
-			amt = 1
-		}
+		// Disable adding multiple buildings to the queue
+		// amount := r.URL.Query().Get("amount")
+		// amt, err := strconv.ParseInt(amount, 10, 64)
+		// if err != nil {
+		// 	slog.Error("failed to parse amount", err)
+		// 	amt = 1
+		// }
+		var amt int64 = 1
 
 		b, ok := common.Buildings[common.BuildingName(building)]
 		if !ok {

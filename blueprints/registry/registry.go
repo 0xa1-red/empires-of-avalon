@@ -5,12 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 
 	"github.com/0xa1-red/empires-of-avalon/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/database"
 	"github.com/google/uuid"
+	"golang.org/x/exp/slog"
 )
 
 var registry *itemRegistry
@@ -25,6 +25,7 @@ type itemRegistry struct {
 }
 
 func new() *itemRegistry {
+	slog.Debug("creating new registry")
 	return &itemRegistry{
 		mx:    &sync.Mutex{},
 		cache: make(itemCollection),
@@ -66,7 +67,6 @@ func Push(kind string, item blueprints.Blueprint, remote ...bool) error {
 		if registry == nil {
 			registry = new()
 		}
-		log.Printf("%v", registry.db)
 		err = registry.pushBuildingBlueprintRemote(kind, item)
 	}
 	return err
@@ -145,8 +145,6 @@ func (r *itemRegistry) pushBuildingBlueprintRemote(kind string, item blueprints.
 	if err != nil {
 		return err
 	}
-
-	log.Printf("%v", r.db)
 
 	if _, err := r.db.Exec("INSERT INTO blueprints (id, kind, data) VALUES ($1, $2, $3)", blueprint.ID, kind, raw.String()); err != nil {
 		return err

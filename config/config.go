@@ -37,6 +37,8 @@ var configs = []struct {
 	{NATS_Password, "NATS_PASSWORD", ""},
 	// Logging
 	{Logging_Level, "LOGGING_LEVEL", "info"},
+	// Persistence
+	{Persistence_Encoding, "PERSISTENCE_ENCODING", EncodingGob},
 }
 
 func Setup(path string) {

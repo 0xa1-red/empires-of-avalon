@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 
+	"github.com/0xa1-red/empires-of-avalon/persistence/encoding"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -21,9 +22,8 @@ func (g *Grain) Encode() ([]byte, error) {
 	encode["identity"] = g.ctx.Identity()
 
 	buf := bytes.NewBuffer([]byte(""))
-	encoder := gob.NewEncoder(buf)
 
-	if err := encoder.Encode(data); err != nil {
+	if err := encoding.Encode(data, buf); err != nil {
 		return nil, err
 	}
 
@@ -33,10 +33,7 @@ func (g *Grain) Encode() ([]byte, error) {
 func (g *Grain) Decode(b []byte) error {
 	m := make(map[string]interface{})
 
-	buf := bytes.NewBuffer(b)
-	decoder := gob.NewDecoder(buf)
-
-	if err := decoder.Decode(&m); err != nil {
+	if err := encoding.Decode(b, m); err != nil {
 		return err
 	}
 

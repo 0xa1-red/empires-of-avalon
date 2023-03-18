@@ -5,17 +5,20 @@ type ResourceName string
 const (
 	Population ResourceName = "population"
 	Wood       ResourceName = "wood"
+	Stone      ResourceName = "stone"
 	Planks     ResourceName = "planks"
 )
 
 var Resources map[ResourceName]Resource = map[ResourceName]Resource{
-	Population: {Name: Population},
-	Wood:       {Name: Wood},
-	Planks:     {Name: Planks},
+	Population: {Name: Population, StartingCap: 6},
+	Wood:       {Name: Wood, StartingCap: 100},
+	Planks:     {Name: Planks, StartingCap: 0},
+	Stone:      {Name: Stone, StartingCap: 20},
 }
 
 type Resource struct {
-	Name ResourceName
+	Name        ResourceName
+	StartingCap int
 }
 
 type ResourceCost struct {

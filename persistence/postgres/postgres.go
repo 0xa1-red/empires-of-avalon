@@ -70,7 +70,7 @@ func (p *Persister) Persist(item contract.Persistable) (int, error) {
 func (p *Persister) Restore(kind, identity string) error {
 	query, params := buildRestoreQuery(kind, identity)
 
-	slog.Debug("Attempting to restore %s actors: %s", kind, query)
+	slog.Debug("Attempting to restore actors", "kind", kind, "query", query)
 
 	res := []Snapshot{}
 	err := p.db.Select(&res, query, params...)

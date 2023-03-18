@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -18,6 +19,16 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+const (
+	CallbackBuildings = "buildings"
+	CallbackResources = "resources"
+
+	KeyBuilding = "building"
+
+	KeyResource = "resource"
+	KeyAmount   = "amount"
+)
+
 type BuildingRegister struct {
 	mx *sync.Mutex
 
@@ -27,62 +38,65 @@ type BuildingRegister struct {
 	Finished time.Time
 }
 
-type ResourceRegister struct {
-	mx *sync.Mutex
-
-	Name     common.ResourceName
-	Amount   int
-	Reserved int
-}
-
 type Grain struct {
 	ctx cluster.GrainContext
 
-	buildings    map[common.BuildingName]*BuildingRegister
-	resources    map[common.ResourceName]*ResourceRegister
-	replySubject string
-	subscription *nats.Subscription
+	buildings     map[common.BuildingName]*BuildingRegister
+	resources     map[common.ResourceName]*ResourceRegister
+	replySubjects map[string]string
+	subscriptions map[string]*nats.Subscription
 }
 
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
-	label := fmt.Sprintf("%s-subject", ctx.Identity())
-	g.replySubject = uuid.NewSHA1(uuid.NameSpaceOID, []byte(label)).String()
+	g.subscriptions = make(map[string]*nats.Subscription)
+	g.replySubjects = map[string]string{
+		CallbackBuildings: fmt.Sprintf("%s-building-callbacks", ctx.Identity()),
+		CallbackResources: fmt.Sprintf("%s-resource-callbacks", ctx.Identity()),
+	}
 
 	// TODO find a better way to only populate if user is new
 	g.buildings = getStartingBuildings()
 	g.resources = getStartingResources()
 
-	cb := func(t *protobuf.TimerFired) {
-		payload := t.Data.AsMap()
-		buildingName := payload["building"].(string)
-		building, ok := common.Buildings[common.BuildingName(buildingName)]
-		if !ok {
-			slog.Error("failed to complete building", fmt.Errorf("Invalid building name: %s", buildingName))
-			return
-		}
-		slog.Debug("finished building", "building", building.Name)
-		g.buildings[building.Name].Amount += 1
-		g.buildings[building.Name].Queue -= 1
+	g.updateLimits()
 
-		for _, cost := range building.Cost {
-			if !cost.Permanent {
-				g.resources[cost.Resource].Amount += g.resources[cost.Resource].Reserved
-			}
-			g.resources[cost.Resource].Reserved = 0
-		}
-	}
-
-	sub, err := intnats.GetConnection().Subscribe(g.replySubject, cb)
-	if err != nil {
-		slog.Error("failed to subscribe to reply subject", err)
+	if err := g.subscribeToBuildingCallbacks(); err != nil {
+		slog.Error("failed to subscribe to building callbacks", err, "subject", g.replySubjects[CallbackBuildings])
 		return
 	}
 
-	g.subscription = sub
+	if err := g.subscribeToResourceCallbacks(); err != nil {
+		slog.Error("failed to subscribe to resource callbacks", err, "subject", g.replySubjects[CallbackResources])
+		return
+	}
 }
+
+func (g *Grain) updateLimits() {
+	newLimits := make(map[common.ResourceName]int)
+	for _, b := range g.buildings {
+		for resource, limit := range common.Buildings[b.Name].Limits {
+			if _, ok := newLimits[resource]; !ok {
+				newLimits[resource] = 0
+			}
+
+			newLimits[resource] += b.Amount * limit
+		}
+	}
+
+	for resource, limit := range newLimits {
+		slog.Debug("setting new cap for resource", "name", resource, "cap", limit)
+		g.resources[resource].Cap = limit
+		g.resources[resource].Update(0)
+	}
+}
+
 func (g *Grain) Terminate(ctx cluster.GrainContext) {
-	defer g.subscription.Unsubscribe()
+	defer func() {
+		for _, sub := range g.subscriptions {
+			sub.Unsubscribe()
+		}
+	}()
 	if len(g.buildings) == 0 {
 		return
 	}
@@ -152,7 +166,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
 		BuildID:  uuid.New().String(),
-		Reply:    g.replySubject,
+		Reply:    g.replySubjects[CallbackBuildings],
 		Duration: b.BuildTime,
 		Amount:   req.Amount,
 		Data: &structpb.Struct{
@@ -170,7 +184,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		}, nil
 	}
 
-	slog.Info("timer response",
+	slog.Debug("building timer response",
 		slog.Int("status", int(res.Status)),
 		slog.Time("deadline", res.Deadline.AsTime()),
 		slog.Time("timestamp", res.Timestamp.AsTime()),
@@ -209,6 +223,7 @@ func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.Grain
 			Fields: map[string]*structpb.Value{
 				"amount":   structpb.NewNumberValue(float64(meta.Amount)),
 				"reserved": structpb.NewNumberValue(float64(meta.Reserved)),
+				"cap":      structpb.NewNumberValue(float64(meta.Cap)),
 			},
 		})
 	}
@@ -230,24 +245,6 @@ func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.Grain
 	}, nil
 }
 
-func getStartingResources() map[common.ResourceName]*ResourceRegister {
-	registers := make(map[common.ResourceName]*ResourceRegister)
-
-	for name := range common.Resources {
-		registers[name] = &ResourceRegister{
-			mx:       &sync.Mutex{},
-			Name:     name,
-			Amount:   0,
-			Reserved: 0,
-		}
-	}
-
-	registers[common.Population] = newResourceRegister(common.Population, 5)
-	registers[common.Wood] = newResourceRegister(common.Wood, 100)
-
-	return registers
-}
-
 func getStartingBuildings() map[common.BuildingName]*BuildingRegister {
 	registers := make(map[common.BuildingName]*BuildingRegister)
 
@@ -263,11 +260,90 @@ func getStartingBuildings() map[common.BuildingName]*BuildingRegister {
 	return registers
 }
 
-func newResourceRegister(name common.ResourceName, amount int) *ResourceRegister {
-	return &ResourceRegister{
-		mx:       &sync.Mutex{},
-		Name:     name,
-		Amount:   amount,
-		Reserved: 0,
+func (g *Grain) startGenerator(generator blueprints.Generator) error {
+	slog.Debug("starting generator", "name", generator.Name)
+	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
+	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		BuildID:  uuid.New().String(),
+		Reply:    g.replySubjects[CallbackResources],
+		Duration: generator.TickLength,
+		Amount:   -1,
+		Data: &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"resource": structpb.NewStringValue(string(generator.Name)),
+				"amount":   structpb.NewNumberValue(float64(generator.Amount)),
+			},
+		},
+		Timestamp: timestamppb.Now(),
+	})
+	if err != nil {
+		return nil
 	}
+
+	slog.Debug("resource timer response",
+		slog.Int("status", int(res.Status)),
+		slog.Time("deadline", res.Deadline.AsTime()),
+		slog.Time("timestamp", res.Timestamp.AsTime()),
+	)
+
+	return nil
+}
+
+func (g *Grain) subscribeToResourceCallbacks() error {
+	cb := func(t *protobuf.TimerFired) {
+		payload := t.Data.AsMap()
+		resourceName := payload[KeyResource].(string)
+		resource, ok := common.Resources[common.ResourceName(resourceName)]
+		if !ok {
+			return
+		}
+
+		amount := int(payload[KeyAmount].(float64))
+
+		g.resources[resource.Name].Update(amount)
+	}
+
+	sub, err := intnats.GetConnection().Subscribe(g.replySubjects[CallbackResources], cb)
+	if err != nil {
+		return err
+	}
+
+	g.subscriptions[CallbackResources] = sub
+	return nil
+}
+
+func (g *Grain) subscribeToBuildingCallbacks() error {
+	cb := func(t *protobuf.TimerFired) {
+		defer g.updateLimits()
+		payload := t.Data.AsMap()
+		buildingName := payload[KeyBuilding].(string)
+		building, ok := common.Buildings[common.BuildingName(buildingName)]
+		if !ok {
+			return
+		}
+		slog.Debug("finished building", "building", building.Name)
+		g.buildings[building.Name].Amount += 1
+		g.buildings[building.Name].Queue -= 1
+
+		for _, cost := range building.Cost {
+			if !cost.Permanent {
+				g.resources[cost.Resource].Amount += g.resources[cost.Resource].Reserved
+			}
+			g.resources[cost.Resource].Reserved = 0
+		}
+
+		for _, gen := range building.Generators {
+			if err := g.startGenerator(gen); err != nil {
+				slog.Error("failed to start generator", err, "name", gen.Name)
+			}
+		}
+	}
+
+	sub, err := intnats.GetConnection().Subscribe(g.replySubjects[CallbackBuildings], cb)
+	if err != nil {
+		return err
+	}
+
+	g.subscriptions[CallbackBuildings] = sub
+	return nil
 }

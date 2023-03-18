@@ -93,7 +93,9 @@ func (g *Grain) startTimer() {
 			}); err != nil {
 				slog.Error("failed to send TimerFired message", err)
 			}
-			g.timer.Amount--
+			if g.timer.Amount != -1 {
+				g.timer.Amount--
+			}
 		} else {
 			break
 		}
@@ -107,7 +109,9 @@ func (g *Grain) startTimer() {
 	t := time.NewTicker(g.timer.Interval)
 
 	for curTime := range t.C {
-		g.timer.Amount--
+		if g.timer.Amount != -1 {
+			g.timer.Amount--
+		}
 		slog.Debug("timer fired", "reply", g.timer.Reply)
 		if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
 			Timestamp: timestamppb.New(curTime),

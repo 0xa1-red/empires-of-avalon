@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/gob"
 	"fmt"
+	"sync"
 
 	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/config"
@@ -11,6 +12,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
 	"github.com/spf13/viper"
+	"golang.org/x/exp/slog"
 )
 
 func (g *Grain) Encode() ([]byte, error) {
@@ -44,6 +46,21 @@ func (g *Grain) Decode(b []byte) error {
 
 	g.buildings = m["buildings"].(map[common.BuildingName]*BuildingRegister)
 	g.resources = m["resources"].(map[common.ResourceName]*ResourceRegister)
+
+	for _, r := range g.resources {
+		r.mx = &sync.Mutex{}
+	}
+
+	for _, b := range g.buildings {
+		b.mx = &sync.Mutex{}
+		g.updateLimits()
+
+		for _, gen := range common.Buildings[b.Name].Generators {
+			if err := g.startGenerator(gen); err != nil {
+				slog.Error("failed to start generator", err, "name", gen.Name)
+			}
+		}
+	}
 
 	return nil
 }

@@ -12,7 +12,7 @@ type Building struct {
 
 type Generator struct {
 	Name       string
-	Amount     int64
+	Amount     int
 	TickLength string
 }
 

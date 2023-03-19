@@ -78,6 +78,11 @@ func (p *Persister) Restore(kind, identity string) error {
 		return err
 	}
 
+	if len(res) == 0 {
+		slog.Debug("no snapshot found", "kind", kind, "query", query)
+		return nil
+	}
+
 	for _, item := range res {
 		p.restore(item)
 	}

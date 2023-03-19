@@ -73,21 +73,27 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 }
 
 func (g *Grain) updateLimits() {
-	newLimits := make(map[common.ResourceName]int)
-	for _, b := range g.buildings {
-		for resource, limit := range common.Buildings[b.Name].Limits {
-			if _, ok := newLimits[resource]; !ok {
-				newLimits[resource] = 0
-			}
+	// newLimits := make(map[common.ResourceName]int)
+	// for _, b := range g.buildings {
+	// 	for resource, limit := range common.Buildings[b.Name].Limits {
+	// 		if _, ok := newLimits[resource]; !ok {
+	// 			newLimits[resource] = 0
+	// 		}
 
-			newLimits[resource] += b.Amount * limit
+	// 		newLimits[resource] += b.Amount * limit
+	// 	}
+	// }
+
+	// for resource, limit := range newLimits {
+	// 	slog.Debug("setting new cap for resource", "name", resource, "cap", limit)
+	// 	g.resources[resource].Cap = limit
+	// 	g.resources[resource].Update(0)
+	// }
+	slog.Warn("this is a warning")
+	for _, resource := range g.resources {
+		if err := resource.UpdateCap(g.resources, g.buildings); err != nil {
+			slog.Error("failed to calculate resource cap", err)
 		}
-	}
-
-	for resource, limit := range newLimits {
-		slog.Debug("setting new cap for resource", "name", resource, "cap", limit)
-		g.resources[resource].Cap = limit
-		g.resources[resource].Update(0)
 	}
 }
 

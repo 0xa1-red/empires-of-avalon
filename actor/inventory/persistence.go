@@ -53,7 +53,7 @@ func (g *Grain) Decode(b []byte) error {
 
 	for _, b := range g.buildings {
 		b.mx = &sync.Mutex{}
-		g.updateLimits()
+		slog.Debug("building decode", "name", b.Name, "amount", b.Amount)
 
 		for _, gen := range common.Buildings[b.Name].Generators {
 			if err := g.startGenerator(gen); err != nil {
@@ -61,6 +61,8 @@ func (g *Grain) Decode(b []byte) error {
 			}
 		}
 	}
+
+	g.updateLimits()
 
 	return nil
 }

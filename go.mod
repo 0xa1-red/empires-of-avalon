@@ -4,12 +4,14 @@ go 1.18
 
 require (
 	github.com/asynkron/protoactor-go v0.0.0-20221002142108-880b460fcd1f
+	github.com/davecgh/go-spew v1.1.1
 	github.com/google/uuid v1.3.0
 	github.com/gorilla/mux v1.8.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.2.0
 	github.com/nats-io/nats.go v1.22.0
 	github.com/spf13/viper v1.15.0
+	github.com/yuin/gopher-lua v1.1.0
 	go.etcd.io/etcd/client/v3 v3.5.6
 	golang.org/x/exp v0.0.0-20221217163422-3c43f8badb15
 	google.golang.org/grpc v1.52.0

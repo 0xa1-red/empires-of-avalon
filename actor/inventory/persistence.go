@@ -3,10 +3,16 @@ package inventory
 import (
 	"bytes"
 	"encoding/gob"
+	"fmt"
+	"sync"
 
 	"github.com/0xa1-red/empires-of-avalon/common"
+	"github.com/0xa1-red/empires-of-avalon/config"
+	"github.com/0xa1-red/empires-of-avalon/persistence/encoding"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
+	"github.com/spf13/viper"
+	"golang.org/x/exp/slog"
 )
 
 func (g *Grain) Encode() ([]byte, error) {
@@ -14,13 +20,13 @@ func (g *Grain) Encode() ([]byte, error) {
 	data := make(map[string]interface{})
 
 	data["buildings"] = g.buildings
+	data["resources"] = g.resources
 	encode["data"] = data
 	encode["identity"] = g.ctx.Identity()
 
 	buf := bytes.NewBuffer([]byte(""))
-	encoder := gob.NewEncoder(buf)
 
-	if err := encoder.Encode(data); err != nil {
+	if err := encoding.Encode(data, buf); err != nil {
 		return nil, err
 	}
 
@@ -30,14 +36,33 @@ func (g *Grain) Encode() ([]byte, error) {
 func (g *Grain) Decode(b []byte) error {
 	m := make(map[string]interface{})
 
-	buf := bytes.NewBuffer(b)
-	decoder := gob.NewDecoder(buf)
-
-	if err := decoder.Decode(&m); err != nil {
+	if err := encoding.Decode(b, m); err != nil {
 		return err
 	}
 
-	g.buildings = m["buildings"].(map[common.Building]*BuildingRegister)
+	if viper.GetString(config.Persistence_Encoding) == config.EncodingJson {
+		return fmt.Errorf("Unimplemented")
+	}
+
+	g.buildings = m["buildings"].(map[common.BuildingName]*BuildingRegister)
+	g.resources = m["resources"].(map[common.ResourceName]*ResourceRegister)
+
+	for _, r := range g.resources {
+		r.mx = &sync.Mutex{}
+	}
+
+	for _, b := range g.buildings {
+		b.mx = &sync.Mutex{}
+		slog.Debug("building decode", "name", b.Name, "amount", b.Amount)
+
+		for _, gen := range common.Buildings[b.Name].Generators {
+			if err := g.startGenerator(gen); err != nil {
+				slog.Error("failed to start generator", err, "name", gen.Name)
+			}
+		}
+	}
+
+	g.updateLimits()
 
 	return nil
 }
@@ -64,6 +89,8 @@ func (g *Grain) Restore(req *protobuf.RestoreRequest, ctx cluster.GrainContext) 
 }
 
 func init() {
-	m := make(map[common.Building]*BuildingRegister)
-	gob.Register(m)
+	buildingRegisters := make(map[common.BuildingName]*BuildingRegister)
+	resourceRegisters := make(map[common.ResourceName]*ResourceRegister)
+	gob.Register(buildingRegisters)
+	gob.Register(resourceRegisters)
 }

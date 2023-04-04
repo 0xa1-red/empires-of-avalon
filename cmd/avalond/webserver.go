@@ -4,12 +4,14 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
-	"github.com/gorilla/mux"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -18,13 +20,17 @@ var server *http.Server
 
 func startServer(wg *sync.WaitGroup, addr string) {
 	defer wg.Done()
-	s := mux.NewRouter()
+	s := chi.NewRouter()
 
-	s.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	s.Use(middleware.Logger)
+	s.Use(middleware.RequestID)
+	s.Use(middleware.Timeout(60 * time.Second))
+
+	s.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("hi"))
 	})
 
-	s.HandleFunc("/inventory", func(w http.ResponseWriter, r *http.Request) {
+	s.Get("/inventory", func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 
 		c := gamecluster.GetC()
@@ -55,7 +61,7 @@ func startServer(wg *sync.WaitGroup, addr string) {
 		w.Write(raw)
 	})
 
-	s.HandleFunc("/build", func(w http.ResponseWriter, r *http.Request) {
+	s.Post("/build", func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		building := r.URL.Query().Get("building")
 

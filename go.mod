@@ -5,6 +5,7 @@ go 1.18
 require (
 	github.com/asynkron/protoactor-go v0.0.0-20221002142108-880b460fcd1f
 	github.com/go-chi/chi v1.5.4
+	github.com/go-chi/render v1.0.2
 	github.com/google/uuid v1.3.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.2.0
@@ -19,6 +20,7 @@ require (
 
 require (
 	github.com/Workiva/go-datastructures v1.0.53 // indirect
+	github.com/ajg/form v1.5.1 // indirect
 	github.com/asynkron/gofun v0.0.0-20220329210725-34fed760f4c2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect

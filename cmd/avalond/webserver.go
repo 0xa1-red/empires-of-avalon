@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/api"
 	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -24,42 +25,10 @@ func startServer(wg *sync.WaitGroup, addr string) {
 
 	s.Use(middleware.Logger)
 	s.Use(middleware.RequestID)
+	s.Use(middleware.AllowContentType("application/json"))
 	s.Use(middleware.Timeout(60 * time.Second))
 
-	s.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("hi"))
-	})
-
-	s.Get("/inventory", func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-
-		c := gamecluster.GetC()
-
-		authUUID, err := uuid.Parse(auth)
-		if err != nil {
-			slog.Error("failed to parse authorization header", err, "auth", auth, "url", r.URL.String())
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		inventory := protobuf.GetInventoryGrainClient(c, common.GetInventoryID(authUUID).String())
-
-		res, err := inventory.Describe(&protobuf.DescribeInventoryRequest{})
-		if err != nil {
-			slog.Error("failed to get inventory", err, "auth", auth, "url", r.URL.String())
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-
-		raw, err := res.Inventory.MarshalJSON()
-		if err != nil {
-			slog.Error("failed to marshal response", err, "auth", auth, "url", r.URL.String())
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(raw)
-	})
+	s.Mount("/", api.NewRouter(gamecluster.GetC()))
 
 	s.Post("/build", func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")

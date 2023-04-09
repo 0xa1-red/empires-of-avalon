@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/api"
 	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
+	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/middleware"
 	"github.com/google/uuid"
-	"github.com/gorilla/mux"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -18,44 +21,16 @@ var server *http.Server
 
 func startServer(wg *sync.WaitGroup, addr string) {
 	defer wg.Done()
-	s := mux.NewRouter()
+	s := chi.NewRouter()
 
-	s.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("hi"))
-	})
+	s.Use(middleware.Logger)
+	s.Use(middleware.RequestID)
+	s.Use(middleware.AllowContentType("application/json"))
+	s.Use(middleware.Timeout(60 * time.Second))
 
-	s.HandleFunc("/inventory", func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
+	s.Mount("/", api.NewRouter(gamecluster.GetC()))
 
-		c := gamecluster.GetC()
-
-		authUUID, err := uuid.Parse(auth)
-		if err != nil {
-			slog.Error("failed to parse authorization header", err, "auth", auth, "url", r.URL.String())
-			http.Error(w, http.StatusText(http.StatusBadRequest), http.StatusBadRequest)
-			return
-		}
-		inventory := protobuf.GetInventoryGrainClient(c, common.GetInventoryID(authUUID).String())
-
-		res, err := inventory.Describe(&protobuf.DescribeInventoryRequest{})
-		if err != nil {
-			slog.Error("failed to get inventory", err, "auth", auth, "url", r.URL.String())
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-
-		raw, err := res.Inventory.MarshalJSON()
-		if err != nil {
-			slog.Error("failed to marshal response", err, "auth", auth, "url", r.URL.String())
-			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(raw)
-	})
-
-	s.HandleFunc("/build", func(w http.ResponseWriter, r *http.Request) {
+	s.Post("/build", func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
 		building := r.URL.Query().Get("building")
 

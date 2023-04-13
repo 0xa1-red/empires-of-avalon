@@ -11,3 +11,8 @@ type ErrorResponse struct {
 	StatusText string
 	Error      error
 }
+
+type BuildRequest struct {
+	Building string `json:"building"`
+	Amount   int    `json:"string,omitempty"`
+}

@@ -11,15 +11,16 @@ const (
 
 var Resources map[ResourceName]Resource = map[ResourceName]Resource{
 	Population: population,
-	Wood:       {Name: Wood, StartingCap: 100},
+	Wood:       wood,
 	Planks:     {Name: Planks, StartingCap: 0},
 	Stone:      {Name: Stone, StartingCap: 20},
 }
 
 type Resource struct {
-	Name        ResourceName
-	StartingCap int
-	CapFormula  string
+	Name           ResourceName
+	StartingAmount int
+	StartingCap    int
+	CapFormula     string
 }
 
 type ResourceCost struct {
@@ -28,11 +29,23 @@ type ResourceCost struct {
 	Permanent bool
 }
 
-var population = Resource{
-	Name:        Population,
-	StartingCap: 6,
-	CapFormula: `
+var (
+	population = Resource{
+		Name:           Population,
+		StartingCap:    6,
+		StartingAmount: 6,
+		CapFormula: `
 print(buildings.house)
 return 6+buildings.house*6
 `,
-}
+	}
+
+	wood = Resource{
+		Name:           Wood,
+		StartingCap:    100,
+		StartingAmount: 100,
+		CapFormula: `
+return 100+buildings.warehouse*100
+`,
+	}
+)

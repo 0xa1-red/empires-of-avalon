@@ -30,8 +30,8 @@ func NewRouter(c *cluster.Cluster) *Router {
 	}
 
 	r.Get("/", router.Index)
-
 	r.Get("/inventory", router.Inventory)
+	r.Get("/build", router.Build) // TODO: Change to Post
 
 	return router
 }

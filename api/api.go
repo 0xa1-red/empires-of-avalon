@@ -1,9 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -30,8 +30,8 @@ func NewRouter(c *cluster.Cluster) *Router {
 	}
 
 	r.Get("/", router.Index)
-
 	r.Get("/inventory", router.Inventory)
+	r.Post("/build", router.Build)
 
 	return router
 }
@@ -85,9 +85,30 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 
 func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 	auth := r.Header.Get("Authorization")
-	building := r.URL.Query().Get("building")
 
-	amt := getBuildingAmount(r)
+	decoder := json.NewDecoder(r.Body)
+	defer r.Body.Close()
+
+	var buildRequest BuildRequest
+	if err := decoder.Decode(&buildRequest); err != nil {
+		slog.Error("failed to parse request", err,
+			"auth", auth,
+		)
+
+		status := http.StatusBadRequest
+		res := ErrorResponse{
+			Status:     status,
+			StatusText: http.StatusText(status),
+			Error:      err,
+		}
+		render.Status(r, status)
+		render.JSON(w, r, res)
+		return
+	}
+
+	building := buildRequest.Building
+
+	amt := getBuildingAmount(buildRequest)
 
 	b, ok := common.Buildings[common.BuildingName(building)]
 	if !ok {
@@ -175,17 +196,12 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, resp)
 }
 
-func getBuildingAmount(r *http.Request) int64 {
+func getBuildingAmount(r BuildRequest) int64 {
 	if !queueBuildings {
 		return 1
 	}
 
-	amount := r.URL.Query().Get("amount")
-	amt, err := strconv.ParseInt(amount, 10, 0)
-	if err != nil {
-		slog.Error("failed to parse amount", err)
-		amt = 1
-	}
+	amt := int64(r.Amount)
 
 	if amt > maximumBuildingRequest {
 		return maximumBuildingRequest

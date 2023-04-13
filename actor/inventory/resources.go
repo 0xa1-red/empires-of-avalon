@@ -88,24 +88,13 @@ func getStartingResources() map[common.ResourceName]*ResourceRegister {
 
 	for name, resource := range common.Resources {
 		registers[name] = &ResourceRegister{
-			mx:       &sync.Mutex{},
-			Name:     name,
-			Amount:   0,
-			Reserved: 0,
-			Cap:      resource.StartingCap,
+			mx:         &sync.Mutex{},
+			Name:       name,
+			Amount:     resource.StartingAmount,
+			Reserved:   0,
+			Cap:        resource.StartingCap,
+			CapFormula: resource.CapFormula,
 		}
-	}
-
-	if register, err := newResourceRegister(common.Population, 5); err != nil {
-		slog.Error("failed to create resource register", err, "resource", common.Population)
-	} else {
-		registers[common.Population] = register
-	}
-
-	if register, err := newResourceRegister(common.Wood, 100); err != nil {
-		slog.Error("failed to create resource register", err, "resource", common.Population)
-	} else {
-		registers[common.Wood] = register
 	}
 
 	return registers

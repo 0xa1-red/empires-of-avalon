@@ -35,7 +35,6 @@ var (
 		StartingCap:    6,
 		StartingAmount: 6,
 		CapFormula: `
-print(buildings.house)
 return 6+buildings.house*6
 `,
 	}

@@ -5,12 +5,16 @@ const (
 )
 
 const (
-	PG_User    = "Postgres.User"
-	PG_Passwd  = "Postgres.Password"
-	PG_Host    = "Postgres.Host"
-	PG_Port    = "Postgres.Port"
-	PG_DB      = "Postgres.Database"
-	PG_SSLMode = "Postgres.SSLMode"
+	DB_Kind = "Database.Kind"
+)
+
+const (
+	PG_User    = "Database.Postgres.User"
+	PG_Passwd  = "Database.Postgres.Password"
+	PG_Host    = "Database.Postgres.Host"
+	PG_Port    = "Database.Postgres.Port"
+	PG_DB      = "Database.Postgres.Database"
+	PG_SSLMode = "Database.Postgres.SSLMode"
 )
 
 const (

@@ -13,13 +13,15 @@ var configs = []struct {
 	env string
 	def interface{}
 }{
+	// Database
+	{DB_Kind, "DB_KIND", "postgres"},
 	// Postgres
-	{PG_User, "POSTGRES_USER", "postgres"},
-	{PG_Passwd, "POSTGRESS_PASSWD", ""},
-	{PG_Host, "POSTGRESS_HOST", "127.0.0.1"},
-	{PG_Port, "POSTGRESS_PORT", "5432"},
-	{PG_DB, "POSTGRESS_DATABASE", "defaultdb"},
-	{PG_SSLMode, "POSTGRESS_SSLMODE", "disable"},
+	{PG_User, "DB_POSTGRES_USER", "postgres"},
+	{PG_Passwd, "DB_POSTGRESS_PASSWD", ""},
+	{PG_Host, "DB_POSTGRESS_HOST", "127.0.0.1"},
+	{PG_Port, "DB_POSTGRESS_PORT", "5432"},
+	{PG_DB, "DB_POSTGRESS_DATABASE", "defaultdb"},
+	{PG_SSLMode, "DB_POSTGRESS_SSLMODE", "disable"},
 	// Cluster
 	{Cluster_Name, "CLUSTER_NAME", "avalond"},
 	{Node_Host, "CLUSTER_NODE_HOST", "0.0.0.0"},

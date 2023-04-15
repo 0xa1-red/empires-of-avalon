@@ -1,11 +1,13 @@
 ---
-postgres:
-  user: "root"
-  password: ""
-  host: "127.0.0.1"
-  port: "26257"
-  database: "defaultdb"
-  sslmode: "disable"
+database:
+  kind: "postgres"
+  postgres:
+    user: "root"
+    password: ""
+    host: "127.0.0.1"
+    port: "26257"
+    database: "defaultdb"
+    sslmode: "disable"
 cluster:
   name: "avalond-dev"
   node:

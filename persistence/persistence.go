@@ -10,7 +10,11 @@ var persister contract.PersisterRestorer
 
 func Create(c *cluster.Cluster) {
 	if persister == nil {
-		persister = postgres.NewPersister(c)
+		p, err := postgres.NewPersister(c)
+		if err != nil {
+			panic(err)
+		}
+		persister = p
 	}
 }
 

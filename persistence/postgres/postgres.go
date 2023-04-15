@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/database"
+	"github.com/0xa1-red/empires-of-avalon/database/pg"
 	"github.com/0xa1-red/empires-of-avalon/persistence/contract"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
@@ -25,17 +25,22 @@ type restorableGrain interface {
 }
 
 type Persister struct {
-	db *database.Conn
+	db *pg.Conn
 	c  *cluster.Cluster
 }
 
-func NewPersister(c *cluster.Cluster) *Persister {
-	p := &Persister{
-		c: c,
+func NewPersister(c *cluster.Cluster) (*Persister, error) {
+	db, err := pg.CreateConnection()
+	if err != nil {
+		return nil, err
 	}
-	p.db = database.Connection()
 
-	return p
+	p := &Persister{
+		c:  c,
+		db: db,
+	}
+
+	return p, nil
 }
 
 func (p *Persister) Persist(item contract.Persistable) (int, error) {

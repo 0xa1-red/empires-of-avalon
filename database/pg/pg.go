@@ -10,11 +10,11 @@ import (
 	"golang.org/x/exp/slog"
 )
 
-type Conn struct {
+type Connection struct {
 	*sqlx.DB
 }
 
-func CreateConnection() (*Conn, error) {
+func CreateConnection() (*Connection, error) {
 	dsn := buildDSN()
 	slog.Debug("connecting to postgres", slog.String("dsn", dsn))
 	c, err := sqlx.Open("postgres", dsn)
@@ -26,7 +26,7 @@ func CreateConnection() (*Conn, error) {
 		return nil, fmt.Errorf("ping: %w", err)
 	}
 
-	return &Conn{c}, nil
+	return &Connection{c}, nil
 }
 
 func buildDSN() string {

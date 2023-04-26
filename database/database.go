@@ -4,12 +4,15 @@ import (
 	"fmt"
 
 	"github.com/0xa1-red/empires-of-avalon/config"
+	"github.com/0xa1-red/empires-of-avalon/database/model"
 	"github.com/0xa1-red/empires-of-avalon/database/pg"
 	_ "github.com/lib/pq"
 	"github.com/spf13/viper"
 )
 
-type Connection interface{}
+type Connection interface {
+	CreateUser(u model.UserRequest) (*model.User, error)
+}
 
 var connection Connection
 

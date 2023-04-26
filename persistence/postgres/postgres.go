@@ -25,7 +25,7 @@ type restorableGrain interface {
 }
 
 type Persister struct {
-	db *pg.Conn
+	db *pg.Connection
 	c  *cluster.Cluster
 }
 

@@ -1,0 +1,46 @@
+# GraphQL schema example
+#
+# https://gqlgen.com/getting-started/
+
+type Inventory {
+  user: User
+  buildings: [InventoryBuilding!]
+  resources: [InventoryResource!]
+}
+
+type Buildings {
+  house: InventoryBuilding
+  warehouse: InventoryBuilding
+  woodcutter: InventoryBuilding
+}
+
+type Resources {
+  population: InventoryResource
+  wood: InventoryResource
+  planks: InventoryResource
+  stone: InventoryResource
+}
+
+type InventoryBuilding {
+  name: String
+  amount: Int
+  queue: Int
+  finish: String
+}
+
+type InventoryResource {
+  name: String
+  amount: Int
+  cap: Int
+  reserved: Int
+}
+
+type User {
+  id: ID!
+  name: String!
+}
+
+type Query {
+  inventory: Inventory!
+  buildings(name: String): InventoryBuilding
+}

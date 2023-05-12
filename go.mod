@@ -1,9 +1,11 @@
 module github.com/0xa1-red/empires-of-avalon
 
-go 1.18
+go 1.20
 
 require (
+	github.com/99designs/gqlgen v0.17.30
 	github.com/asynkron/protoactor-go v0.0.0-20221002142108-880b460fcd1f
+	github.com/davecgh/go-spew v1.1.1
 	github.com/go-chi/chi v1.5.4
 	github.com/go-chi/render v1.0.2
 	github.com/google/uuid v1.3.0
@@ -11,15 +13,17 @@ require (
 	github.com/lib/pq v1.2.0
 	github.com/nats-io/nats.go v1.22.0
 	github.com/spf13/viper v1.15.0
+	github.com/vektah/gqlparser/v2 v2.5.1
 	github.com/yuin/gopher-lua v1.1.0
 	go.etcd.io/etcd/client/v3 v3.5.6
-	golang.org/x/exp v0.0.0-20221217163422-3c43f8badb15
+	golang.org/x/exp v0.0.0-20230510235704-dd950f8aeaea
 	google.golang.org/grpc v1.52.0
 	google.golang.org/protobuf v1.28.1
 )
 
 require (
 	github.com/Workiva/go-datastructures v1.0.53 // indirect
+	github.com/agnivade/levenshtein v1.1.1 // indirect
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/asynkron/gofun v0.0.0-20220329210725-34fed760f4c2 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
@@ -32,6 +36,8 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/gorilla/websocket v1.5.0 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.1 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/lithammer/shortuuid/v4 v4.0.0 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect

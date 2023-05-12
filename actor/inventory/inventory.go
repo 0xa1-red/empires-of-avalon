@@ -23,7 +23,8 @@ const (
 	CallbackBuildings = "buildings"
 	CallbackResources = "resources"
 
-	KeyBuilding = "building"
+	KeyBuilding          = "building"
+	KeyDisableGenerators = "disable_generators"
 
 	KeyResource = "resource"
 	KeyAmount   = "amount"
@@ -302,31 +303,7 @@ func (g *Grain) subscribeToResourceCallbacks() error {
 }
 
 func (g *Grain) subscribeToBuildingCallbacks() error {
-	cb := func(t *protobuf.TimerFired) {
-		defer g.updateLimits()
-		payload := t.Data.AsMap()
-		buildingName := payload[KeyBuilding].(string)
-		building, ok := common.Buildings[common.BuildingName(buildingName)]
-		if !ok {
-			return
-		}
-		slog.Debug("finished building", "building", building.Name)
-		g.buildings[building.Name].Amount += 1
-		g.buildings[building.Name].Queue -= 1
-
-		for _, cost := range building.Cost {
-			if !cost.Permanent {
-				g.resources[cost.Resource].Amount += g.resources[cost.Resource].Reserved
-			}
-			g.resources[cost.Resource].Reserved = 0
-		}
-
-		for _, gen := range building.Generators {
-			if err := g.startGenerator(gen); err != nil {
-				slog.Error("failed to start generator", err, "name", gen.Name)
-			}
-		}
-	}
+	cb := g.buildingCallback
 
 	sub, err := intnats.GetConnection().Subscribe(g.replySubjects[CallbackBuildings], cb)
 	if err != nil {
@@ -335,4 +312,36 @@ func (g *Grain) subscribeToBuildingCallbacks() error {
 
 	g.subscriptions[CallbackBuildings] = sub
 	return nil
+}
+
+func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
+	defer g.updateLimits()
+	payload := t.Data.AsMap()
+	buildingName := payload[KeyBuilding].(string)
+	building, ok := common.Buildings[common.BuildingName(buildingName)]
+	if !ok {
+		return
+	}
+	slog.Debug("finished building", "building", building.Name)
+	g.buildings[building.Name].Amount += 1
+	g.buildings[building.Name].Queue -= 1
+	g.buildings[building.Name].Finished = time.Time{}
+
+	for _, cost := range building.Cost {
+		if !cost.Permanent {
+			g.resources[cost.Resource].Amount += g.resources[cost.Resource].Reserved
+		}
+		g.resources[cost.Resource].Reserved = 0
+	}
+
+	// For testing purposes, we can disable generators if needed
+	if payload[KeyDisableGenerators].(bool) {
+		return
+	}
+
+	for _, gen := range building.Generators {
+		if err := g.startGenerator(gen); err != nil {
+			slog.Error("failed to start generator", err, "name", gen.Name)
+		}
+	}
 }

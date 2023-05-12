@@ -19,7 +19,7 @@ func Setup() {
 	opts := slog.HandlerOptions{
 		Level: getLevel(),
 	}
-	handler := opts.NewTextHandler(os.Stdout)
+	handler := slog.NewTextHandler(os.Stdout, &opts)
 	slog.SetDefault(slog.New(handler))
 }
 

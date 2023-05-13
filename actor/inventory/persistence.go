@@ -60,6 +60,12 @@ func (g *Grain) Decode(b []byte) error {
 				slog.Error("failed to start generator", err, "name", gen.Name)
 			}
 		}
+
+		for _, tf := range common.Buildings[b.Name].Transformers {
+			if err := g.startTransformer(tf); err != nil {
+				slog.Error("failed to start transformer", err, "name", tf.Name)
+			}
+		}
 	}
 
 	g.updateLimits()

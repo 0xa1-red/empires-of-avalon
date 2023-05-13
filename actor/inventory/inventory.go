@@ -20,8 +20,9 @@ import (
 )
 
 const (
-	CallbackBuildings = "buildings"
-	CallbackResources = "resources"
+	CallbackBuildings    = "buildings"
+	CallbackGenerators   = "generators"
+	CallbackTransformers = "transformers"
 
 	KeyBuilding          = "building"
 	KeyDisableGenerators = "disable_generators"
@@ -44,16 +45,35 @@ type Grain struct {
 
 	buildings     map[common.BuildingName]*BuildingRegister
 	resources     map[common.ResourceName]*ResourceRegister
-	replySubjects map[string]string
 	subscriptions map[string]*nats.Subscription
+	callbacks     map[string]*Callback
+}
+
+type Callback struct {
+	Name    string
+	Subject string
+	Method  func(*protobuf.TimerFired)
 }
 
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
 	g.subscriptions = make(map[string]*nats.Subscription)
-	g.replySubjects = map[string]string{
-		CallbackBuildings: fmt.Sprintf("%s-building-callbacks", ctx.Identity()),
-		CallbackResources: fmt.Sprintf("%s-resource-callbacks", ctx.Identity()),
+	g.callbacks = map[string]*Callback{
+		CallbackGenerators: {
+			Name:    CallbackGenerators,
+			Method:  g.generatorCallback,
+			Subject: fmt.Sprintf("%s-resource-callbacks", ctx.Identity()),
+		},
+		CallbackBuildings: {
+			Name:    CallbackBuildings,
+			Method:  g.buildingCallback,
+			Subject: fmt.Sprintf("%s-building-callbacks", ctx.Identity()),
+		},
+		CallbackTransformers: {
+			Name:    CallbackTransformers,
+			Method:  g.transformerCallback,
+			Subject: fmt.Sprintf("%s-transform-callbacks", ctx.Identity()),
+		},
 	}
 
 	// TODO find a better way to only populate if user is new
@@ -62,14 +82,10 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 
 	g.updateLimits()
 
-	if err := g.subscribeToBuildingCallbacks(); err != nil {
-		slog.Error("failed to subscribe to building callbacks", err, "subject", g.replySubjects[CallbackBuildings])
-		return
-	}
-
-	if err := g.subscribeToResourceCallbacks(); err != nil {
-		slog.Error("failed to subscribe to resource callbacks", err, "subject", g.replySubjects[CallbackResources])
-		return
+	for _, cb := range g.callbacks {
+		if err := g.subscribeToCallback(cb); err != nil {
+			slog.Error("failed to subscribe to callback", err, "callback", cb.Name, "subject", cb.Subject)
+		}
 	}
 }
 
@@ -156,7 +172,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
 		BuildID:  uuid.New().String(),
-		Reply:    g.replySubjects[CallbackBuildings],
+		Reply:    g.callbacks[CallbackBuildings].Subject,
 		Duration: b.BuildTime,
 		Amount:   req.Amount,
 		Data: &structpb.Struct{
@@ -259,7 +275,7 @@ func (g *Grain) startGenerator(generator blueprints.Generator) error {
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
 		BuildID:  uuid.New().String(),
-		Reply:    g.replySubjects[CallbackResources],
+		Reply:    g.callbacks[CallbackGenerators].Subject,
 		Duration: generator.TickLength,
 		Amount:   -1,
 		Data: &structpb.Struct{
@@ -283,38 +299,44 @@ func (g *Grain) startGenerator(generator blueprints.Generator) error {
 	return nil
 }
 
-func (g *Grain) subscribeToResourceCallbacks() error {
-	cb := func(t *protobuf.TimerFired) {
-		payload := t.Data.AsMap()
-		resourceName := payload[KeyResource].(string)
-		resource, ok := common.Resources[common.ResourceName(resourceName)]
-		if !ok {
-			return
-		}
-
-		amount := int(payload[KeyAmount].(float64))
-
-		g.resources[resource.Name].Update(amount)
-	}
-
-	sub, err := intnats.GetConnection().Subscribe(g.replySubjects[CallbackResources], cb)
+func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
+	slog.Debug("starting transformer", "name", transformer.Name)
+	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
+	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		BuildID:  uuid.New().String(),
+		Reply:    g.callbacks[CallbackTransformers].Subject,
+		Duration: transformer.TickLength,
+		Amount:   -1,
+		Data: &structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"cost":   structpb.NewListValue(transformer.CostStructList()),
+				"result": structpb.NewListValue(transformer.ResultStructList()),
+			},
+		},
+		Timestamp: timestamppb.Now(),
+	})
 	if err != nil {
-		return err
+		return nil
 	}
 
-	g.subscriptions[CallbackResources] = sub
+	slog.Debug("transform timer response",
+		slog.Int("status", int(res.Status)),
+		slog.Time("deadline", res.Deadline.AsTime()),
+		slog.Time("timestamp", res.Timestamp.AsTime()),
+	)
+
 	return nil
 }
 
-func (g *Grain) subscribeToBuildingCallbacks() error {
-	cb := g.buildingCallback
-
-	sub, err := intnats.GetConnection().Subscribe(g.replySubjects[CallbackBuildings], cb)
+func (g *Grain) subscribeToCallback(cb *Callback) error {
+	subject := cb.Subject
+	sub, err := intnats.GetConnection().Subscribe(subject, cb.Method)
 	if err != nil {
 		return err
 	}
 
-	g.subscriptions[CallbackBuildings] = sub
+	slog.Debug("subscribed to callback subject", "subject", subject)
+	g.subscriptions[cb.Name] = sub
 	return nil
 }
 
@@ -339,7 +361,8 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 	}
 
 	// For testing purposes, we can disable generators if needed
-	if payload[KeyDisableGenerators].(bool) {
+	if disable, ok := payload[KeyDisableGenerators]; ok && disable.(bool) {
+		slog.Debug("generators are disabled for building", "building", building.Name)
 		return
 	}
 
@@ -348,4 +371,69 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 			slog.Error("failed to start generator", err, "name", gen.Name)
 		}
 	}
+
+	for _, tf := range building.Transformers {
+		if err := g.startTransformer(tf); err != nil {
+			slog.Error("failed to start generator", err, "name", tf.Name)
+		}
+	}
+}
+
+func (g *Grain) generatorCallback(t *protobuf.TimerFired) {
+	payload := t.Data.AsMap()
+	resourceName := payload[KeyResource].(string)
+	resource, ok := common.Resources[common.ResourceName(resourceName)]
+	if !ok {
+		return
+	}
+
+	amount := int(payload[KeyAmount].(float64))
+
+	g.resources[resource.Name].Update(amount)
+}
+
+func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
+	payload := t.Data
+
+	// TODO try to refactor resource allocation
+	removeCache := map[string]int{}
+	addCache := map[string]int{}
+	rollback := func() {
+		for name, amount := range removeCache {
+			g.resources[common.ResourceName(name)].Amount += amount
+		}
+	}
+
+	for _, cost := range payload.Fields["cost"].GetListValue().Values {
+		c := cost.GetStructValue()
+		resource := c.Fields["resource"].GetStringValue()
+		g.resources[common.ResourceName(resource)].mx.Lock()
+		current := g.resources[common.ResourceName(resource)].Amount
+		needed := int(c.Fields["amount"].GetNumberValue())
+
+		if current < needed {
+			slog.Debug("insufficient resource", "name", resource, "current", current, "needed", needed)
+			rollback()
+			g.resources[common.ResourceName(resource)].mx.Unlock()
+			return
+		}
+
+		g.resources[common.ResourceName(resource)].Amount -= needed
+		removeCache[resource] = needed
+		g.resources[common.ResourceName(resource)].mx.Unlock()
+	}
+
+	for _, result := range payload.Fields["result"].GetListValue().Values {
+		r := result.GetStructValue()
+		resource := r.Fields["resource"].GetStringValue()
+		g.resources[common.ResourceName(resource)].mx.Lock()
+		added := int(r.Fields["amount"].GetNumberValue())
+
+		g.resources[common.ResourceName(resource)].Amount += added
+		addCache[resource] = added
+		g.resources[common.ResourceName(resource)].mx.Unlock()
+	}
+
+	slog.Info("transformer callback fired", "removed", removeCache, "added", addCache)
+	// spew.Dump(t.Data.AsMap())
 }

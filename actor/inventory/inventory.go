@@ -199,11 +199,15 @@ func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.Grain
 	resourceValues := make(map[string]*structpb.Value)
 
 	for building, meta := range g.buildings {
+		finish := ""
+		if !meta.Finished.IsZero() && meta.Finished.After(time.Now()) {
+			finish = meta.Finished.Format(time.RFC3339)
+		}
 		buildingValues[string(building)] = structpb.NewStructValue(&structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"amount": structpb.NewNumberValue(float64(meta.Amount)),
 				"queue":  structpb.NewNumberValue(float64(meta.Queue)),
-				"finish": structpb.NewStringValue(meta.Finished.Format(time.RFC3339)),
+				"finish": structpb.NewStringValue(finish),
 			},
 		})
 	}

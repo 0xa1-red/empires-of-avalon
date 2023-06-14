@@ -437,3 +437,45 @@ func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
 	slog.Info("transformer callback fired", "removed", removeCache, "added", addCache)
 	// spew.Dump(t.Data.AsMap())
 }
+
+func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) (*protobuf.ReserveResponse, error) {
+	resources := req.Resources.AsMap()
+
+	var err error
+	cache := make(map[common.ResourceName]int)
+	for resource, amount := range resources {
+		amt := int(amount.(float64))
+		resourceName := common.ResourceName(resource)
+		if current, ok := g.resources[resourceName]; ok {
+			current.mx.Lock()
+			if current.Amount >= amt {
+				current.Amount -= amt
+				current.Reserved += amt
+				cache[resourceName] = amt
+			} else {
+				err = InsufficientResourceError{Resource: resourceName}
+			}
+			current.mx.Unlock()
+		} else {
+			err = InvalidResourceError{Resource: resourceName}
+		}
+	}
+
+	if err != nil {
+		for resource, amount := range cache {
+			g.resources[resource].Amount += amount
+			g.resources[resource].Reserved -= amount
+		}
+
+		return &protobuf.ReserveResponse{
+			Timestamp: timestamppb.Now(),
+			Status:    protobuf.Status_Error,
+			Error:     err.Error(),
+		}, nil
+	}
+
+	return &protobuf.ReserveResponse{
+		Timestamp: timestamppb.Now(),
+		Status:    protobuf.Status_OK,
+	}, nil
+}

@@ -18,8 +18,14 @@ func TestBuildingCallback(t *testing.T) {
 
 	g.updateLimits()
 
-	g.buildings[common.House].Queue = 1
-	g.buildings[common.House].Finished = time.Now().Add(time.Hour)
+	g.buildings[common.House].Queue = []Building{
+		{
+			State:          "inactive",
+			WorkersMaximum: 2,
+			WorkersCurrent: 0,
+			Completion:     time.Now().Add(time.Hour),
+		},
+	}
 
 	payload := protobuf.TimerFired{
 		Timestamp: timestamppb.Now(),
@@ -33,16 +39,12 @@ func TestBuildingCallback(t *testing.T) {
 
 	g.buildingCallback(&payload)
 
-	if expected, actual := 1, g.buildings[common.House].Amount; expected != actual {
+	if expected, actual := 1, len(g.buildings[common.House].Completed); expected != actual {
 		t.Fatalf("FAIL: expected amount to be %d, got %d", expected, actual)
 	}
 
-	if expected, actual := 0, g.buildings[common.House].Queue; expected != actual {
+	if expected, actual := 0, len(g.buildings[common.House].Queue); expected != actual {
 		t.Fatalf("FAIL: expected queue to be %d, got %d", expected, actual)
-	}
-
-	if expected, actual := true, g.buildings[common.House].Finished.IsZero(); expected != actual {
-		t.Fatalf("FAIL: expected finished to be zero, got %s", g.buildings[common.House].Finished.Format(time.RFC3339))
 	}
 }
 

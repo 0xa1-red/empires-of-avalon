@@ -12,6 +12,12 @@ enum Status {
     Error = 2;
 }
 
+enum TimerKind {
+    Building = 0;
+    Generator = 1;
+    Transformer = 2;
+}
+
 message StartRequest {
     string Name = 1;
     int64 Amount = 2;
@@ -32,10 +38,10 @@ message FinishResponse {
 
 message TimerRequest {
     string TraceID = 1;
-    string BuildID = 2;
+    TimerKind Kind = 2;
     string Reply = 3;
     string Duration = 4;
-    int64 Amount = 5;
+    string InventoryID = 5;
     google.protobuf.Struct Data = 6;
     google.protobuf.Timestamp Timestamp = 7;
 }

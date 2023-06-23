@@ -12,6 +12,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	intnats "github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"github.com/asynkron/protoactor-go/cluster"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"golang.org/x/exp/slog"
@@ -29,15 +30,33 @@ const (
 
 	KeyResource = "resource"
 	KeyAmount   = "amount"
+
+	StateQueued   = "queued"
+	StateInactive = "inactive"
+	StateActive   = "active"
 )
+
+type ReservedResource struct {
+	Name      string
+	Amount    int
+	Permanent bool
+}
+
+type Building struct {
+	ID                uuid.UUID
+	State             string
+	WorkersMaximum    int
+	WorkersCurrent    int
+	Completion        time.Time
+	ReservedResources []ReservedResource
+}
 
 type BuildingRegister struct {
 	mx *sync.Mutex
 
-	Name     common.BuildingName
-	Amount   int
-	Queue    int
-	Finished time.Time
+	Name      common.BuildingName
+	Completed []Building
+	Queue     []Building
 }
 
 type Grain struct {
@@ -135,7 +154,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	queue := 0
 	for _, b := range g.buildings {
-		queue += b.Queue
+		queue += len(b.Queue)
 	}
 	if queue > 0 {
 		return &protobuf.StartResponse{
@@ -160,24 +179,20 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		}, nil
 	}
 
-	logFields := []any{"name", string(b.Name)}
-	for _, cost := range b.Cost {
-		g.resources[cost.Resource].Amount -= cost.Amount
-		g.resources[cost.Resource].Reserved = cost.Amount
-		logFields = append(logFields, string(cost.Resource), cost.Amount)
-	}
-
-	slog.Info("requested building", logFields...)
+	buildingID := uuid.New()
+	slog.Info("requested building", "name", string(b.Name), "id", buildingID.String())
 
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
-		BuildID:  uuid.New().String(),
-		Reply:    g.callbacks[CallbackBuildings].Subject,
-		Duration: b.BuildTime,
-		Amount:   req.Amount,
+		Kind:        protobuf.TimerKind_Building,
+		Reply:       g.callbacks[CallbackBuildings].Subject,
+		InventoryID: g.ctx.Identity(),
+		Duration:    b.BuildTime,
 		Data: &structpb.Struct{
 			Fields: map[string]*structpb.Value{
+				"id":       structpb.NewStringValue(buildingID.String()),
 				"building": structpb.NewStringValue(string(b.Name)),
+				"amount":   structpb.NewNumberValue(1),
 			},
 		},
 		Timestamp: timestamppb.Now(),
@@ -196,13 +211,25 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		slog.Time("timestamp", res.Timestamp.AsTime()),
 	)
 
-	g.buildings[b.Name].Queue += int(req.Amount)
-	d, _ := time.ParseDuration(b.BuildTime)
-	start := time.Now()
-	for r := req.Amount; r > 0; r-- {
-		start = start.Add(d)
+	reserved := make([]ReservedResource, 0)
+	for _, resource := range b.Cost {
+		reserved = append(reserved, ReservedResource{
+			Name:      string(resource.Resource),
+			Amount:    resource.Amount,
+			Permanent: resource.Permanent,
+		})
 	}
-	g.buildings[b.Name].Finished = start
+
+	build := Building{
+		ID:                buildingID,
+		State:             StateQueued,
+		WorkersMaximum:    2,
+		WorkersCurrent:    0,
+		Completion:        res.Deadline.AsTime(),
+		ReservedResources: make([]ReservedResource, 0),
+	}
+
+	g.buildings[b.Name].Queue = append(g.buildings[b.Name].Queue, build)
 
 	return &protobuf.StartResponse{
 		Status:    protobuf.Status_OK,
@@ -215,15 +242,51 @@ func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.Grain
 	resourceValues := make(map[string]*structpb.Value)
 
 	for building, meta := range g.buildings {
-		finish := ""
-		if !meta.Finished.IsZero() && meta.Finished.After(time.Now()) {
-			finish = meta.Finished.Format(time.RFC3339)
+		completedList := make([]*structpb.Value, 0)
+		for _, state := range meta.Completed {
+			finish := ""
+			if !state.Completion.IsZero() {
+				finish = state.Completion.Format(time.RFC3339)
+			}
+			b := structpb.NewStructValue(&structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					"state":           structpb.NewStringValue(state.State),
+					"workers_max":     structpb.NewNumberValue(float64(state.WorkersMaximum)),
+					"workers_current": structpb.NewNumberValue(float64(state.WorkersCurrent)),
+					"completion":      structpb.NewStringValue(finish),
+				},
+			})
+
+			completedList = append(completedList, b)
 		}
+
+		queuedList := make([]*structpb.Value, 0)
+		for _, state := range meta.Queue {
+			finish := ""
+			if !state.Completion.IsZero() && state.Completion.After(time.Now()) {
+				finish = state.Completion.Format(time.RFC3339)
+			}
+			b := structpb.NewStructValue(&structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					"state":      structpb.NewStringValue(state.State),
+					"completion": structpb.NewStringValue(finish),
+				},
+			})
+
+			queuedList = append(queuedList, b)
+		}
+
+		completed := structpb.NewListValue(&structpb.ListValue{
+			Values: completedList,
+		})
+		queued := structpb.NewListValue(&structpb.ListValue{
+			Values: queuedList,
+		})
+
 		buildingValues[string(building)] = structpb.NewStructValue(&structpb.Struct{
 			Fields: map[string]*structpb.Value{
-				"amount": structpb.NewNumberValue(float64(meta.Amount)),
-				"queue":  structpb.NewNumberValue(float64(meta.Queue)),
-				"finish": structpb.NewStringValue(finish),
+				"completed": completed,
+				"queued":    queued,
 			},
 		})
 	}
@@ -260,10 +323,10 @@ func getStartingBuildings() map[common.BuildingName]*BuildingRegister {
 
 	for name := range common.Buildings {
 		registers[name] = &BuildingRegister{
-			mx:     &sync.Mutex{},
-			Name:   name,
-			Amount: 0,
-			Queue:  0,
+			mx:        &sync.Mutex{},
+			Name:      name,
+			Completed: make([]Building, 0),
+			Queue:     make([]Building, 0),
 		}
 	}
 
@@ -274,10 +337,10 @@ func (g *Grain) startGenerator(generator blueprints.Generator) error {
 	slog.Debug("starting generator", "name", generator.Name)
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
-		BuildID:  uuid.New().String(),
-		Reply:    g.callbacks[CallbackGenerators].Subject,
-		Duration: generator.TickLength,
-		Amount:   -1,
+		Kind:        protobuf.TimerKind_Generator,
+		Reply:       g.callbacks[CallbackGenerators].Subject,
+		Duration:    generator.TickLength,
+		InventoryID: g.ctx.Identity(),
 		Data: &structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"resource": structpb.NewStringValue(string(generator.Name)),
@@ -303,10 +366,10 @@ func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
 	slog.Debug("starting transformer", "name", transformer.Name)
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
-		BuildID:  uuid.New().String(),
-		Reply:    g.callbacks[CallbackTransformers].Subject,
-		Duration: transformer.TickLength,
-		Amount:   -1,
+		Kind:        protobuf.TimerKind_Transformer,
+		Reply:       g.callbacks[CallbackTransformers].Subject,
+		Duration:    transformer.TickLength,
+		InventoryID: g.ctx.Identity(),
 		Data: &structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"cost":   structpb.NewListValue(transformer.CostStructList()),
@@ -316,7 +379,11 @@ func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
 		Timestamp: timestamppb.Now(),
 	})
 	if err != nil {
-		return nil
+		slog.Debug("transform timer returned error",
+			slog.Int("status", int(res.Status)),
+			slog.Time("timestamp", res.Timestamp.AsTime()),
+		)
+		return err
 	}
 
 	slog.Debug("transform timer response",
@@ -348,10 +415,19 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 	if !ok {
 		return
 	}
+	g.buildings[building.Name].mx.Lock()
+	defer g.buildings[building.Name].mx.Unlock()
+
 	slog.Debug("finished building", "building", building.Name)
-	g.buildings[building.Name].Amount += 1
-	g.buildings[building.Name].Queue -= 1
-	g.buildings[building.Name].Finished = time.Time{}
+	b := g.buildings[building.Name].Queue[0]
+	b.State = StateActive
+	b.Completion = time.Now()
+	g.buildings[building.Name].Completed = append(g.buildings[building.Name].Completed, b)
+	if len(g.buildings[building.Name].Queue) == 1 {
+		g.buildings[building.Name].Queue = make([]Building, 0)
+	} else {
+		g.buildings[building.Name].Queue = g.buildings[building.Name].Queue[1:]
+	}
 
 	for _, cost := range building.Cost {
 		if !cost.Permanent {
@@ -395,33 +471,10 @@ func (g *Grain) generatorCallback(t *protobuf.TimerFired) {
 func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
 	payload := t.Data
 
-	// TODO try to refactor resource allocation
-	removeCache := map[string]int{}
+	spew.Dump(t.Data)
+
+	reserveCache := map[string]int{}
 	addCache := map[string]int{}
-	rollback := func() {
-		for name, amount := range removeCache {
-			g.resources[common.ResourceName(name)].Amount += amount
-		}
-	}
-
-	for _, cost := range payload.Fields["cost"].GetListValue().Values {
-		c := cost.GetStructValue()
-		resource := c.Fields["resource"].GetStringValue()
-		g.resources[common.ResourceName(resource)].mx.Lock()
-		current := g.resources[common.ResourceName(resource)].Amount
-		needed := int(c.Fields["amount"].GetNumberValue())
-
-		if current < needed {
-			slog.Debug("insufficient resource", "name", resource, "current", current, "needed", needed)
-			rollback()
-			g.resources[common.ResourceName(resource)].mx.Unlock()
-			return
-		}
-
-		g.resources[common.ResourceName(resource)].Amount -= needed
-		removeCache[resource] = needed
-		g.resources[common.ResourceName(resource)].mx.Unlock()
-	}
 
 	for _, result := range payload.Fields["result"].GetListValue().Values {
 		r := result.GetStructValue()
@@ -434,8 +487,23 @@ func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
 		g.resources[common.ResourceName(resource)].mx.Unlock()
 	}
 
-	slog.Info("transformer callback fired", "removed", removeCache, "added", addCache)
-	// spew.Dump(t.Data.AsMap())
+	for _, cost := range payload.Fields["cost"].GetListValue().Values {
+		r := cost.GetStructValue()
+
+		resource := r.Fields["resource"].GetStringValue()
+		g.resources[common.ResourceName(resource)].mx.Lock()
+		reserved := int(r.Fields["amount"].GetNumberValue())
+
+		if !r.Fields["temporary"].GetBoolValue() {
+			g.resources[common.ResourceName(resource)].Amount += reserved
+		}
+		g.resources[common.ResourceName(resource)].Reserved -= reserved
+		reserveCache[resource] = reserved
+		g.resources[common.ResourceName(resource)].mx.Unlock()
+	}
+
+	slog.Info("transformer callback fired", "removed", reserveCache, "added", addCache)
+	spew.Dump(t.Data.AsMap())
 }
 
 func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) (*protobuf.ReserveResponse, error) {
@@ -456,6 +524,7 @@ func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) 
 				err = InsufficientResourceError{Resource: resourceName}
 			}
 			current.mx.Unlock()
+			slog.Info("reserved resources", "resource", resource, "amount", amt)
 		} else {
 			err = InvalidResourceError{Resource: resourceName}
 		}
@@ -465,6 +534,7 @@ func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) 
 		for resource, amount := range cache {
 			g.resources[resource].Amount += amount
 			g.resources[resource].Reserved -= amount
+			slog.Info("rolling back reserved resources", "resource", resource, "amount", amount)
 		}
 
 		return &protobuf.ReserveResponse{

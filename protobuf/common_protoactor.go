@@ -74,6 +74,7 @@ type Inventory interface {
 	Start(*StartRequest, cluster.GrainContext) (*StartResponse, error)
 	Describe(*DescribeInventoryRequest, cluster.GrainContext) (*DescribeInventoryResponse, error)
 	Restore(*RestoreRequest, cluster.GrainContext) (*RestoreResponse, error)
+	Reserve(*ReserveRequest, cluster.GrainContext) (*ReserveResponse, error)
 }
 
 // InventoryGrainClient holds the base data for the InventoryGrain
@@ -148,6 +149,32 @@ func (g *InventoryGrainClient) Restore(r *RestoreRequest, opts ...cluster.GrainC
 	switch msg := resp.(type) {
 	case *cluster.GrainResponse:
 		result := &RestoreResponse{}
+		err = proto.Unmarshal(msg.MessageData, result)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	case *cluster.GrainErrorResponse:
+		return nil, errors.New(msg.Err)
+	default:
+		return nil, errors.New("unknown response")
+	}
+}
+
+// Reserve requests the execution on to the cluster with CallOptions
+func (g *InventoryGrainClient) Reserve(r *ReserveRequest, opts ...cluster.GrainCallOption) (*ReserveResponse, error) {
+	bytes, err := proto.Marshal(r)
+	if err != nil {
+		return nil, err
+	}
+	reqMsg := &cluster.GrainRequest{MethodIndex: 3, MessageData: bytes}
+	resp, err := g.cluster.Call(g.Identity, "Inventory", reqMsg, opts...)
+	if err != nil {
+		return nil, err
+	}
+	switch msg := resp.(type) {
+	case *cluster.GrainResponse:
+		result := &ReserveResponse{}
 		err = proto.Unmarshal(msg.MessageData, result)
 		if err != nil {
 			return nil, err
@@ -254,6 +281,30 @@ func (a *InventoryActor) Receive(ctx actor.Context) {
 			bytes, err := proto.Marshal(r0)
 			if err != nil {
 				plog.Error("Restore(RestoreRequest) proto.Marshal failed", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			resp := &cluster.GrainResponse{MessageData: bytes}
+			ctx.Respond(resp)
+		case 3:
+			req := &ReserveRequest{}
+			err := proto.Unmarshal(msg.MessageData, req)
+			if err != nil {
+				plog.Error("Reserve(ReserveRequest) proto.Unmarshal failed.", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			r0, err := a.inner.Reserve(req, a.ctx)
+			if err != nil {
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			bytes, err := proto.Marshal(r0)
+			if err != nil {
+				plog.Error("Reserve(ReserveRequest) proto.Marshal failed", logmod.Error(err))
 				resp := &cluster.GrainErrorResponse{Err: err.Error()}
 				ctx.Respond(resp)
 				return

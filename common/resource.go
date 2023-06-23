@@ -47,4 +47,13 @@ return 6+buildings.house*6
 return 100+buildings.warehouse*100
 `,
 	}
+
+	planks = Resource{
+		Name:           Planks,
+		StartingCap:    100,
+		StartingAmount: 0,
+		CapFormula: `
+return 100+buildings.warehouse*100
+`,
+	}
 )

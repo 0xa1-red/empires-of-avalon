@@ -57,8 +57,8 @@ end
 
 	buildTbl := &lua.LTable{}
 	for _, building := range buildings {
-		slog.Debug("setting building table item", "resource", rr.Name, "name", building.Name, "amount", building.Amount)
-		buildTbl.RawSetString(string(building.Name), lua.LNumber(building.Amount))
+		slog.Debug("setting building table item", "resource", rr.Name, "name", building.Name, "amount", building.Completed)
+		buildTbl.RawSetString(string(building.Name), lua.LNumber(len(building.Completed)))
 	}
 
 	if err := l.DoString(fn); err != nil {

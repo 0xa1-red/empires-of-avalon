@@ -63,6 +63,7 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 		render.JSON(w, r, res)
 		return
 	}
+	slog.Info("getting inventory grain client", "id", common.GetInventoryID(authUUID).String())
 	inventory := protobuf.GetInventoryGrainClient(rt.cluster, common.GetInventoryID(authUUID).String())
 
 	res, err := inventory.Describe(&protobuf.DescribeInventoryRequest{})

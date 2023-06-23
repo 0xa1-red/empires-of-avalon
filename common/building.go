@@ -8,6 +8,7 @@ const (
 	House      BuildingName = "house"
 	Warehouse  BuildingName = "warehouse"
 	Woodcutter BuildingName = "woodcutter"
+	Lumberyard BuildingName = "lumberyard"
 )
 
 var Buildings map[BuildingName]Building = map[BuildingName]Building{
@@ -59,12 +60,40 @@ var Buildings map[BuildingName]Building = map[BuildingName]Building{
 			},
 		},
 	},
+
+	Lumberyard: {
+		Name:      Lumberyard,
+		BuildTime: "1s",
+		Cost: []*ResourceCost{
+			{Resource: Wood, Amount: 1, Permanent: false}, // TODO temp for testing
+		},
+		Transformers: []blueprints.Transformer{
+			{
+				Name: string(Planks),
+				Cost: []blueprints.TransformerCost{
+					{
+						Resource:  string(wood.Name),
+						Amount:    5,
+						Temporary: false,
+					},
+				},
+				Result: []blueprints.TransformerResult{
+					{
+						Resource: string(planks.Name),
+						Amount:   1,
+					},
+				},
+				TickLength: "10s",
+			},
+		},
+	},
 }
 
 type Building struct {
-	Name       BuildingName
-	BuildTime  string
-	Cost       []*ResourceCost
-	Limits     map[ResourceName]int
-	Generators []blueprints.Generator
+	Name         BuildingName
+	BuildTime    string
+	Cost         []*ResourceCost
+	Limits       map[ResourceName]int
+	Generators   []blueprints.Generator
+	Transformers []blueprints.Transformer
 }

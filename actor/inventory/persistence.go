@@ -53,11 +53,20 @@ func (g *Grain) Decode(b []byte) error {
 
 	for _, b := range g.buildings {
 		b.mx = &sync.Mutex{}
-		slog.Debug("building decode", "name", b.Name, "amount", b.Amount)
+		if len(b.Completed) == 0 {
+			continue
+		}
+		slog.Debug("building decode", "name", b.Name, "amount", len(b.Completed))
 
 		for _, gen := range common.Buildings[b.Name].Generators {
 			if err := g.startGenerator(gen); err != nil {
 				slog.Error("failed to start generator", err, "name", gen.Name)
+			}
+		}
+
+		for _, tf := range common.Buildings[b.Name].Transformers {
+			if err := g.startTransformer(tf); err != nil {
+				slog.Error("failed to start transformer", err, "name", tf.Name)
 			}
 		}
 	}

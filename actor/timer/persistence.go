@@ -60,7 +60,9 @@ func (g *Grain) Restore(req *protobuf.RestoreRequest, ctx cluster.GrainContext) 
 		}, nil
 	}
 
-	g.startTimer()
+	g.startBuildingTimer()
+	g.startGenerateTimer()
+	g.startTransformTimer()
 
 	return &protobuf.RestoreResponse{
 		Status: protobuf.Status_OK,

@@ -59,6 +59,23 @@ type BuildingRegister struct {
 	Queue     []Building
 }
 
+type Sequence struct {
+	mx *sync.Mutex
+
+	count        uint32
+	lastIncrease time.Time
+}
+
+func (s *Sequence) Inc() uint32 {
+	s.mx.Lock()
+	defer s.mx.Unlock()
+
+	s.count++
+	s.lastIncrease = time.Now()
+
+	return s.count
+}
+
 type Grain struct {
 	ctx cluster.GrainContext
 
@@ -66,6 +83,7 @@ type Grain struct {
 	resources     map[common.ResourceName]*ResourceRegister
 	subscriptions map[string]*nats.Subscription
 	callbacks     map[string]*Callback
+	emitSeq       *Sequence
 }
 
 type Callback struct {
@@ -77,6 +95,9 @@ type Callback struct {
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
 	g.subscriptions = make(map[string]*nats.Subscription)
+	g.emitSeq = &Sequence{
+		mx: &sync.Mutex{},
+	}
 	g.callbacks = map[string]*Callback{
 		CallbackGenerators: {
 			Name:    CallbackGenerators,
@@ -453,6 +474,10 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 			slog.Error("failed to start generator", err, "name", tf.Name)
 		}
 	}
+
+	if err := g.emit(); err != nil {
+		slog.Error("failed to emit status update", err, "inventory_id", g.ctx.Identity())
+	}
 }
 
 func (g *Grain) generatorCallback(t *protobuf.TimerFired) {
@@ -465,7 +490,11 @@ func (g *Grain) generatorCallback(t *protobuf.TimerFired) {
 
 	amount := int(payload[KeyAmount].(float64))
 
-	g.resources[resource.Name].Update(amount)
+	if g.resources[resource.Name].Update(amount) {
+		if err := g.emit(); err != nil {
+			slog.Error("failed to emit status update", err, "inventory_id", g.ctx.Identity())
+		}
+	}
 }
 
 func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
@@ -503,7 +532,10 @@ func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
 	}
 
 	slog.Info("transformer callback fired", "removed", reserveCache, "added", addCache)
-	spew.Dump(t.Data.AsMap())
+
+	if err := g.emit(); err != nil {
+		slog.Error("failed to emit status update", err, "inventory_id", g.ctx.Identity())
+	}
 }
 
 func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) (*protobuf.ReserveResponse, error) {
@@ -544,8 +576,33 @@ func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) 
 		}, nil
 	}
 
+	if err := g.emit(); err != nil {
+		slog.Error("failed to emit status update", err, "inventory_id", g.ctx.Identity())
+	}
+
 	return &protobuf.ReserveResponse{
 		Timestamp: timestamppb.Now(),
 		Status:    protobuf.Status_OK,
 	}, nil
+}
+
+func (g *Grain) emit() error {
+	inventory, err := g.Describe(nil, nil)
+	if err != nil {
+		return err
+	}
+
+	update := &protobuf.InventoryStatusUpdate{
+		Inventory: inventory.Inventory,
+		Timestamp: inventory.Timestamp,
+		Sequence:  int64(g.emitSeq.Inc()),
+	}
+
+	subject := fmt.Sprintf("status.%s", g.ctx.Identity())
+	slog.Debug("pushing status update to subject", "subject", subject)
+	if err := intnats.GetConnection().Publish(subject, update); err != nil {
+		return err
+	}
+
+	return nil
 }

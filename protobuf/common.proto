@@ -68,6 +68,12 @@ message DescribeInventoryResponse {
     google.protobuf.Timestamp Timestamp = 2;
 }
 
+message InventoryStatusUpdate {
+    google.protobuf.Struct Inventory = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+    int64 Sequence = 3;
+}
+
 message RestoreRequest {
     bytes Data = 1;
 }

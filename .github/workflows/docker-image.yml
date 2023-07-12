@@ -3,10 +3,34 @@ name: Docker Image CI
 on:
   release:
     types: [published]
+  push:
+    branches:
+      - main
+  pull_request:
 
 jobs:
 
+  lint:
+
+      runs-on: ubuntu-latest
+      steps:
+        - 
+          name: Checkout
+          uses: actions/checkout@v3
+        - name: Go Setup
+          uses: actions/setup-go@v4
+          with:
+            go-version: '1.20'
+            cache: false
+        - 
+          name: golangci-lint
+          uses: golangci/golangci-lint-action@v3
+          with:
+            version: v1.53
+            args: --out-format=github-actions
+
   build:
+    if: github.ref == 'refs/heads/"main"' && github.event_name == 'release'
 
     runs-on: ubuntu-latest
 

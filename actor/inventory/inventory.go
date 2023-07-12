@@ -95,7 +95,6 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		},
 	}
 
-	// TODO find a better way to only populate if user is new
 	g.buildings = getStartingBuildings()
 	g.resources = getStartingResources()
 
@@ -122,6 +121,7 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 			sub.Unsubscribe() // nolint
 		}
 	}()
+
 	if len(g.buildings) == 0 {
 		return
 	}
@@ -131,7 +131,6 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 	} else {
 		slog.Debug("grain successfully persisted", "kind", g.Kind(), "identity", ctx.Identity(), "written", n)
 	}
-
 }
 
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}
@@ -145,10 +144,13 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 			Timestamp: timestamppb.Now(),
 		}, nil
 	}
+
 	if _, ok := g.buildings[b.Name]; !ok {
 		g.buildings[b.Name] = &BuildingRegister{
-			mx:   &sync.Mutex{},
-			Name: b.Name,
+			mx:        &sync.Mutex{},
+			Name:      b.Name,
+			Completed: make([]Building, 0),
+			Queue:     make([]Building, 0),
 		}
 	}
 
@@ -156,6 +158,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	for _, b := range g.buildings {
 		queue += len(b.Queue)
 	}
+
 	if queue > 0 {
 		return &protobuf.StartResponse{
 			Status:    protobuf.Status_Error,
@@ -165,6 +168,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	}
 
 	insufficient := make([]string, 0)
+
 	for _, cost := range b.Cost {
 		if g.resources[cost.Resource].Amount < cost.Amount {
 			insufficient = append(insufficient, string(cost.Resource))
@@ -184,6 +188,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		TraceID:     "",
 		Kind:        protobuf.TimerKind_Building,
 		Reply:       g.callbacks[CallbackBuildings].Subject,
 		InventoryID: g.ctx.Identity(),
@@ -197,6 +202,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		},
 		Timestamp: timestamppb.Now(),
 	})
+
 	if err != nil {
 		return &protobuf.StartResponse{
 			Status:    protobuf.Status_Error,
@@ -226,7 +232,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		WorkersMaximum:    2,
 		WorkersCurrent:    0,
 		Completion:        res.Deadline.AsTime(),
-		ReservedResources: make([]ReservedResource, 0),
+		ReservedResources: reserved,
 	}
 
 	g.buildings[b.Name].Queue = append(g.buildings[b.Name].Queue, build)
@@ -234,6 +240,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	return &protobuf.StartResponse{
 		Status:    protobuf.Status_OK,
 		Timestamp: timestamppb.Now(),
+		Error:     "",
 	}, nil
 }
 
@@ -243,11 +250,13 @@ func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.Grain
 
 	for building, meta := range g.buildings {
 		completedList := make([]*structpb.Value, 0)
+
 		for _, state := range meta.Completed {
 			finish := ""
 			if !state.Completion.IsZero() {
 				finish = state.Completion.Format(time.RFC3339)
 			}
+
 			b := structpb.NewStructValue(&structpb.Struct{
 				Fields: map[string]*structpb.Value{
 					"state":           structpb.NewStringValue(state.State),
@@ -261,11 +270,13 @@ func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.Grain
 		}
 
 		queuedList := make([]*structpb.Value, 0)
+
 		for _, state := range meta.Queue {
 			finish := ""
 			if !state.Completion.IsZero() && state.Completion.After(time.Now()) {
 				finish = state.Completion.Format(time.RFC3339)
 			}
+
 			b := structpb.NewStructValue(&structpb.Struct{
 				Fields: map[string]*structpb.Value{
 					"state":      structpb.NewStringValue(state.State),
@@ -335,8 +346,10 @@ func getStartingBuildings() map[common.BuildingName]*BuildingRegister {
 
 func (g *Grain) startGenerator(generator blueprints.Generator) error {
 	slog.Debug("starting generator", "name", generator.Name)
+
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		TraceID:     "",
 		Kind:        protobuf.TimerKind_Generator,
 		Reply:       g.callbacks[CallbackGenerators].Subject,
 		Duration:    generator.TickLength,
@@ -349,6 +362,7 @@ func (g *Grain) startGenerator(generator blueprints.Generator) error {
 		},
 		Timestamp: timestamppb.Now(),
 	})
+
 	if err != nil {
 		return nil
 	}
@@ -364,8 +378,10 @@ func (g *Grain) startGenerator(generator blueprints.Generator) error {
 
 func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
 	slog.Debug("starting transformer", "name", transformer.Name)
+
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		TraceID:     "",
 		Kind:        protobuf.TimerKind_Transformer,
 		Reply:       g.callbacks[CallbackTransformers].Subject,
 		Duration:    transformer.TickLength,
@@ -378,11 +394,13 @@ func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
 		},
 		Timestamp: timestamppb.Now(),
 	})
+
 	if err != nil {
 		slog.Debug("transform timer returned error",
 			slog.Int("status", int(res.Status)),
 			slog.Time("timestamp", res.Timestamp.AsTime()),
 		)
+
 		return err
 	}
 
@@ -398,23 +416,29 @@ func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
 func (g *Grain) subscribeToCallback(cb *Callback) error {
 	subject := cb.Subject
 	sub, err := intnats.GetConnection().Subscribe(subject, cb.Method)
+
 	if err != nil {
 		return err
 	}
 
 	slog.Debug("subscribed to callback subject", "subject", subject)
+
 	g.subscriptions[cb.Name] = sub
+
 	return nil
 }
 
 func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 	defer g.updateLimits()
+
 	payload := t.Data.AsMap()
 	buildingName := payload[KeyBuilding].(string)
 	building, ok := common.Buildings[common.BuildingName(buildingName)]
+
 	if !ok {
 		return
 	}
+
 	g.buildings[building.Name].mx.Lock()
 	defer g.buildings[building.Name].mx.Unlock()
 
@@ -423,6 +447,7 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 	b.State = StateActive
 	b.Completion = time.Now()
 	g.buildings[building.Name].Completed = append(g.buildings[building.Name].Completed, b)
+
 	if len(g.buildings[building.Name].Queue) == 1 {
 		g.buildings[building.Name].Queue = make([]Building, 0)
 	} else {
@@ -433,6 +458,7 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 		if !cost.Permanent {
 			g.resources[cost.Resource].Amount += g.resources[cost.Resource].Reserved
 		}
+
 		g.resources[cost.Resource].Reserved = 0
 	}
 
@@ -442,23 +468,15 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 		return
 	}
 
-	for _, gen := range building.Generators {
-		if err := g.startGenerator(gen); err != nil {
-			slog.Error("failed to start generator", err, "name", gen.Name)
-		}
-	}
-
-	for _, tf := range building.Transformers {
-		if err := g.startTransformer(tf); err != nil {
-			slog.Error("failed to start generator", err, "name", tf.Name)
-		}
-	}
+	g.startBuildingGenerators(building)
+	g.startBuildingTransformers(building)
 }
 
 func (g *Grain) generatorCallback(t *protobuf.TimerFired) {
 	payload := t.Data.AsMap()
 	resourceName := payload[KeyResource].(string)
 	resource, ok := common.Resources[common.ResourceName(resourceName)]
+
 	if !ok {
 		return
 	}
@@ -497,6 +515,7 @@ func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
 		if !r.Fields["temporary"].GetBoolValue() {
 			g.resources[common.ResourceName(resource)].Amount += reserved
 		}
+
 		g.resources[common.ResourceName(resource)].Reserved -= reserved
 		reserveCache[resource] = reserved
 		g.resources[common.ResourceName(resource)].mx.Unlock()
@@ -510,10 +529,13 @@ func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) 
 	resources := req.Resources.AsMap()
 
 	var err error
+
 	cache := make(map[common.ResourceName]int)
+
 	for resource, amount := range resources {
 		amt := int(amount.(float64))
 		resourceName := common.ResourceName(resource)
+
 		if current, ok := g.resources[resourceName]; ok {
 			current.mx.Lock()
 			if current.Amount >= amt {
@@ -547,5 +569,22 @@ func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) 
 	return &protobuf.ReserveResponse{
 		Timestamp: timestamppb.Now(),
 		Status:    protobuf.Status_OK,
+		Error:     "",
 	}, nil
+}
+
+func (g *Grain) startBuildingGenerators(b common.Building) {
+	for _, gen := range b.Generators {
+		if err := g.startGenerator(gen); err != nil {
+			slog.Error("failed to start generator", err, "name", gen.Name)
+		}
+	}
+}
+
+func (g *Grain) startBuildingTransformers(b common.Building) {
+	for _, tr := range b.Transformers {
+		if err := g.startTransformer(tr); err != nil {
+			slog.Error("failed to start transformer", err, "name", tr.Name)
+		}
+	}
 }

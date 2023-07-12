@@ -21,6 +21,7 @@ func CreateConnection() error {
 	dsn := buildDSN()
 	slog.Debug("connecting to postgres", slog.String("dsn", dsn))
 	c, err := sqlx.Open("postgres", dsn)
+
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}
@@ -30,6 +31,7 @@ func CreateConnection() error {
 	}
 
 	connection = &Conn{c}
+
 	return nil
 }
 
@@ -40,6 +42,7 @@ func Connection() *Conn {
 			os.Exit(1)
 		}
 	}
+
 	return connection
 }
 
@@ -48,6 +51,7 @@ func buildDSN() string {
 	if pwd := viper.GetString(config.PG_Passwd); pwd != "" {
 		user = fmt.Sprintf("%s:%s", user, pwd)
 	}
+
 	return fmt.Sprintf("postgres://%s@%s:%s/%s?sslmode=%s",
 		user,
 		viper.GetString(config.PG_Host),

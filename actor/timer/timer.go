@@ -31,6 +31,7 @@ type Grain struct {
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
 }
+
 func (g *Grain) Terminate(ctx cluster.GrainContext) {
 	if g.timer.Amount > 0 {
 		if n, err := persistence.Get().Persist(g); err != nil {
@@ -40,13 +41,15 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 		}
 	}
 }
+
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}
 
 func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext) (*protobuf.TimerResponse, error) {
 	start := time.Now()
+
 	d, err := time.ParseDuration(req.Duration)
 	if err != nil {
-		return &protobuf.TimerResponse{
+		return &protobuf.TimerResponse{ // nolint
 			Status:    protobuf.Status_Error,
 			Error:     err.Error(),
 			Timestamp: timestamppb.New(start),
@@ -60,10 +63,13 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 		Interval:    d,
 		InventoryID: req.InventoryID,
 		Data:        req.Data.AsMap(),
+		Amount:      0,
 	}
 
 	slog.Info("starting timer", "trace_id", req.TraceID, "interval", d.String())
+
 	timerFn := g.startBuildingTimer
+
 	switch req.Kind {
 	case protobuf.TimerKind_Generator:
 		timerFn = g.startGenerateTimer
@@ -80,12 +86,14 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 		Status:    protobuf.Status_OK,
 		Deadline:  timestamppb.New(deadline),
 		Timestamp: timestamppb.Now(),
+		Error:     "",
 	}, nil
 }
 
 func (g *Grain) startBuildingTimer() {
 	now := time.Now()
 	conn := nats.GetConnection()
+
 	d, err := structpb.NewValue(g.timer.Data)
 	if err != nil {
 		slog.Error("failed to start timer", err)
@@ -102,6 +110,7 @@ func (g *Grain) startBuildingTimer() {
 			}
 
 			g.timer = nil
+
 			return
 		}
 	}
@@ -110,6 +119,7 @@ func (g *Grain) startBuildingTimer() {
 
 	for curTime := range t.C {
 		slog.Debug("timer fired", "kind", g.timer.Kind.String(), "reply", g.timer.Reply, "inventory", g.timer.InventoryID)
+
 		if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
 			Timestamp: timestamppb.New(curTime),
 			Data:      d.GetStructValue(),
@@ -126,6 +136,7 @@ func (g *Grain) startBuildingTimer() {
 func (g *Grain) startGenerateTimer() {
 	now := time.Now()
 	conn := nats.GetConnection()
+
 	d, err := structpb.NewValue(g.timer.Data)
 	if err != nil {
 		slog.Error("failed to start timer", err)
@@ -140,6 +151,7 @@ func (g *Grain) startGenerateTimer() {
 			}); err != nil {
 				slog.Error("failed to send TimerFired message", err)
 			}
+
 			g.timer.Start = nextTrigger
 		} else {
 			break
@@ -150,6 +162,7 @@ func (g *Grain) startGenerateTimer() {
 
 	for curTime := range t.C {
 		slog.Debug("timer fired", "kind", g.timer.Kind.String(), "reply", g.timer.Reply, "inventory", g.timer.InventoryID)
+
 		if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
 			Timestamp: timestamppb.New(curTime),
 			Data:      d.GetStructValue(),
@@ -163,6 +176,7 @@ func (g *Grain) startTransformTimer() {
 	now := time.Now()
 	conn := nats.GetConnection()
 	d, err := structpb.NewValue(g.timer.Data)
+
 	if err != nil {
 		slog.Error("failed to start timer", err)
 	}
@@ -176,6 +190,7 @@ func (g *Grain) startTransformTimer() {
 			}); err != nil {
 				slog.Error("failed to send TimerFired message", err)
 			}
+
 			g.timer.Start = nextTrigger
 		} else {
 			break
@@ -191,8 +206,10 @@ func (g *Grain) startTransformTimer() {
 		t := time.NewTimer(g.timer.Interval)
 
 		curTime := <-t.C
+
 		if send {
 			slog.Debug("timer fired", "kind", g.timer.Kind.String(), "reply", g.timer.Reply, "inventory", g.timer.InventoryID)
+
 			if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
 				Timestamp: timestamppb.New(curTime),
 				Data:      d.GetStructValue(),
@@ -217,6 +234,7 @@ func (g *Grain) reserveResources() error {
 	if err != nil {
 		return err
 	}
+
 	ig := protobuf.GetInventoryGrainClient(g.ctx.Cluster(), g.timer.InventoryID)
 	msg := protobuf.ReserveRequest{
 		Resources: r.GetStructValue(),
@@ -237,6 +255,7 @@ func (g *Grain) reserveResources() error {
 
 func getResourcesFromTimer(t *Timer) (map[string]interface{}, error) {
 	resources := make(map[string]interface{})
+
 	costs, ok := t.Data["cost"].([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("invalid cost list value")
@@ -248,15 +267,19 @@ func getResourcesFromTimer(t *Timer) (map[string]interface{}, error) {
 			return nil, fmt.Errorf("invalid cost value")
 		}
 
-		var cc string
-		var amt float64
+		var (
+			cc  string
+			amt float64
+		)
 
 		if cc, ok = c["resource"].(string); !ok {
 			return nil, fmt.Errorf("invalid resource value")
 		}
+
 		if amt, ok = c["amount"].(float64); !ok {
 			return nil, fmt.Errorf("invalid amount value")
 		}
+
 		resources[cc] = int(amt)
 	}
 

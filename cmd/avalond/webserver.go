@@ -16,6 +16,7 @@ var server *http.Server
 
 func startServer(wg *sync.WaitGroup, addr string) {
 	defer wg.Done()
+
 	s := chi.NewRouter()
 
 	s.Use(middleware.Logger)
@@ -25,11 +26,14 @@ func startServer(wg *sync.WaitGroup, addr string) {
 
 	s.Mount("/", api.NewRouter(gamecluster.GetC()))
 
-	server = &http.Server{
-		Addr:    addr,
-		Handler: s,
+	server = &http.Server{ // nolint:exhaustruct
+		Addr:              addr,
+		Handler:           s,
+		ReadHeaderTimeout: 3 * time.Second,
 	}
+
 	slog.Info("starting http server", "address", addr)
+
 	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("http server error", err)
 	}

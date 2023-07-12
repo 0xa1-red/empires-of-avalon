@@ -48,7 +48,7 @@ func main() {
 
 	system := actor.NewActorSystem()
 
-	provider, err := etcd.NewWithConfig(viper.GetString(config.ETCD_Root), clientv3.Config{
+	provider, err := etcd.NewWithConfig(viper.GetString(config.ETCD_Root), clientv3.Config{ // nolint
 		Endpoints:   viper.GetStringSlice(config.ETCD_Endpoints),
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{grpc.WithBlock()},
@@ -58,17 +58,16 @@ func main() {
 	}
 
 	lookup := disthash.New()
-	slog.Debug("configuring remote", slog.String("host", viper.GetString(config.Node_Host)), slog.String("port", viper.GetString(config.Node_Port)))
-	remoteConfig := remote.Configure(viper.GetString(config.Node_Host), viper.GetInt(config.Node_Port))
 
+	slog.Debug("configuring remote", slog.String("host", viper.GetString(config.Node_Host)), slog.String("port", viper.GetString(config.Node_Port)))
+
+	remoteConfig := remote.Configure(viper.GetString(config.Node_Host), viper.GetInt(config.Node_Port))
 	inventoryKind := protobuf.NewInventoryKind(func() protobuf.Inventory {
 		return &inventory.Grain{}
 	}, 0)
-
 	timerKind := protobuf.NewTimerKind(func() protobuf.Timer {
 		return &timer.Grain{}
 	}, 0)
-
 	clusterConfig := cluster.Configure(viper.GetString(config.Cluster_Name), provider, lookup, remoteConfig,
 		cluster.WithKinds(inventoryKind, timerKind))
 
@@ -87,6 +86,7 @@ func main() {
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
+
 	bindAddress := fmt.Sprintf("%s:%s",
 		viper.GetString(config.HTTP_Address),
 		viper.GetString(config.HTTP_Port))

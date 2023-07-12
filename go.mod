@@ -1,6 +1,6 @@
 module github.com/0xa1-red/empires-of-avalon
 
-go 1.18
+go 1.20
 
 require (
 	github.com/asynkron/protoactor-go v0.0.0-20221002142108-880b460fcd1f

@@ -31,9 +31,9 @@ type Persister struct {
 
 func NewPersister(c *cluster.Cluster) *Persister {
 	p := &Persister{
-		c: c,
+		db: database.Connection(),
+		c:  c,
 	}
-	p.db = database.Connection()
 
 	return p
 }
@@ -58,11 +58,16 @@ func (p *Persister) Persist(item contract.Persistable) (int, error) {
 		item.Identity(),
 		raw,
 	); err != nil {
-		tx.Rollback()
+		if err := tx.Rollback(); err != nil {
+			return 0, err
+		}
+
 		return 0, err
 	}
 
-	tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 
 	return len(raw), nil
 }
@@ -73,6 +78,7 @@ func (p *Persister) Restore(kind, identity string) error {
 	slog.Debug("Attempting to restore actors", "kind", kind, "query", query)
 
 	res := []Snapshot{}
+
 	err := p.db.Select(&res, query, params...)
 	if err != nil {
 		return err
@@ -84,7 +90,9 @@ func (p *Persister) Restore(kind, identity string) error {
 	}
 
 	for _, item := range res {
-		p.restore(item)
+		if err := p.restore(item); err != nil {
+			slog.Warn("failed to restore snapshot", "kind", item.Kind, "identity", item.Identity.String())
+		}
 	}
 
 	return nil
@@ -92,6 +100,7 @@ func (p *Persister) Restore(kind, identity string) error {
 
 func (p *Persister) restore(item Snapshot) error {
 	var client restorableGrain
+
 	switch item.Kind {
 	case "inventory":
 		client = protobuf.GetInventoryGrainClient(p.c, item.Identity.String())
@@ -110,6 +119,7 @@ func (p *Persister) restore(item Snapshot) error {
 func buildRestoreQuery(kind, identity string) (string, []interface{}) {
 	filter := make([]string, 0)
 	params := make([]interface{}, 0)
+
 	if kind != "" {
 		filter = append(filter, "kind")
 		params = append(params, kind)
@@ -125,10 +135,12 @@ func buildRestoreQuery(kind, identity string) (string, []interface{}) {
 	}
 
 	query := "SELECT DISTINCT ON (kind, identity) kind, identity, data, created_at FROM snapshots"
+
 	if len(filter) > 0 {
 		filterStr := strings.Join(filter, " AND ")
 		query = fmt.Sprintf("%s WHERE %s", query, filterStr)
 	}
+
 	query = fmt.Sprintf("%s ORDER BY kind, identity, created_at DESC", query)
 
 	return query, params

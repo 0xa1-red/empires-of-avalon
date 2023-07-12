@@ -26,6 +26,7 @@ type itemRegistry struct {
 
 func new() *itemRegistry {
 	slog.Debug("creating new registry")
+
 	return &itemRegistry{
 		mx:    &sync.Mutex{},
 		cache: make(itemCollection),
@@ -43,7 +44,7 @@ func Get(kind string, id uuid.UUID) (blueprints.Blueprint, error) {
 		return item, nil
 	}
 
-	if errors.Is(err, NotFoundError{}) {
+	if errors.Is(err, NotFoundError{}) { // nolint
 		item, err = lookupRemote(kind, id)
 		if err == nil {
 			return item, nil
@@ -58,17 +59,21 @@ func Push(kind string, item blueprints.Blueprint, remote ...bool) error {
 	if remote != nil {
 		isRemote = remote[0]
 	}
+
 	if err := push(kind, item); err != nil {
 		return err
 	}
 
 	var err error
+
 	if isRemote {
 		if registry == nil {
 			registry = new()
 		}
+
 		err = registry.pushBuildingBlueprintRemote(kind, item)
 	}
+
 	return err
 }
 
@@ -80,12 +85,11 @@ func lookupLocal(kind string, id uuid.UUID) (blueprints.Blueprint, error) {
 
 	registry.mx.Lock()
 	defer registry.mx.Unlock()
+
 	if item, ok := registry.cache[kind][id]; !ok {
 		return nil, NewNotFoundError(kind, id)
-	} else if i, ok := item.(blueprints.Blueprint); !ok {
-		return nil, NewNotFoundError(kind, id)
 	} else {
-		return i, nil
+		return item, nil
 	}
 }
 
@@ -98,9 +102,9 @@ func lookupRemote(kind string, id uuid.UUID) (blueprints.Blueprint, error) {
 	}
 
 	var res blueprints.Blueprint
-	switch kind {
-	case "building":
-		res = &blueprints.Building{}
+
+	if kind == "building" {
+		res = &blueprints.Building{} // nolint
 		if err := r.Scan(&res); err != nil {
 			return nil, err
 		}
@@ -129,6 +133,7 @@ func push(kind string, item blueprints.Blueprint) error {
 	if err != nil {
 		return err
 	}
+
 	registry.cache[kind][parsedID] = item
 
 	return nil
@@ -139,8 +144,10 @@ func (r *itemRegistry) pushBuildingBlueprintRemote(kind string, item blueprints.
 	if !ok {
 		return fmt.Errorf("invalid item type %T", item)
 	}
+
 	raw := bytes.NewBuffer([]byte(""))
 	encoder := json.NewEncoder(raw)
+
 	err := encoder.Encode(blueprint)
 	if err != nil {
 		return err

@@ -22,5 +22,3 @@ type PersisterRestorer interface {
 	Persister
 	Restorer
 }
-
-var persister PersisterRestorer

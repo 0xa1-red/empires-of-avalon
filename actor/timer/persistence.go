@@ -14,6 +14,7 @@ func (g *Grain) Encode() ([]byte, error) {
 	if g.timer.Amount == 0 {
 		return nil, nil
 	}
+
 	encode := make(map[string]interface{})
 	data := make(map[string]interface{})
 
@@ -66,10 +67,11 @@ func (g *Grain) Restore(req *protobuf.RestoreRequest, ctx cluster.GrainContext) 
 
 	return &protobuf.RestoreResponse{
 		Status: protobuf.Status_OK,
+		Error:  "",
 	}, nil
 }
 
 func init() {
-	gob.Register(&Timer{})
-	gob.Register(&structpb.Value_StringValue{})
+	gob.Register(&Timer{})                      // nolint
+	gob.Register(&structpb.Value_StringValue{}) // nolint
 }

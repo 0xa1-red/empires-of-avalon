@@ -19,26 +19,27 @@ type ResourceRegister struct {
 	Reserved   int
 }
 
-func newResourceRegister(name common.ResourceName, amount int) (*ResourceRegister, error) {
-	rr, ok := common.Resources[name]
-	if !ok {
-		return nil, fmt.Errorf("invalid resource")
-	}
+// func newResourceRegister(name common.ResourceName, amount int) (*ResourceRegister, error) {
+// 	rr, ok := common.Resources[name]
+// 	if !ok {
+// 		return nil, fmt.Errorf("invalid resource")
+// 	}
 
-	return &ResourceRegister{
-		mx:         &sync.Mutex{},
-		Name:       rr.Name,
-		CapFormula: rr.CapFormula,
-		Amount:     amount,
-		Reserved:   0,
-	}, nil
-}
+// 	return &ResourceRegister{
+// 		mx:         &sync.Mutex{},
+// 		Name:       rr.Name,
+// 		CapFormula: rr.CapFormula,
+// 		Amount:     amount,
+// 		Reserved:   0,
+// 	}, nil
+// }
 
 func (rr *ResourceRegister) UpdateCap(resources map[common.ResourceName]*ResourceRegister, buildings map[common.BuildingName]*BuildingRegister) error {
 	if rr.CapFormula == "" {
 		slog.Debug("no formula defined, skipping cap update", "resource", rr.Name)
 		return nil
 	}
+
 	l := lua.NewState()
 	defer l.Close()
 
@@ -49,13 +50,15 @@ end
 `, rr.CapFormula)
 	slog.Debug("registering lua function", "function", fn)
 
-	resTbl := &lua.LTable{}
+	resTbl := &lua.LTable{} // nolint
+
 	for _, resource := range resources {
 		slog.Debug("setting resource table item", "resource", rr.Name, "name", resource.Name, "amount", resource.Amount)
 		resTbl.RawSetString(string(resource.Name), lua.LNumber(resource.Amount))
 	}
 
-	buildTbl := &lua.LTable{}
+	buildTbl := &lua.LTable{} // nolint
+
 	for _, building := range buildings {
 		slog.Debug("setting building table item", "resource", rr.Name, "name", building.Name, "amount", building.Completed)
 		buildTbl.RawSetString(string(building.Name), lua.LNumber(len(building.Completed)))
@@ -65,7 +68,7 @@ end
 		return err
 	}
 
-	err := l.CallByParam(lua.P{
+	err := l.CallByParam(lua.P{ // nolint
 		Fn:      l.GetGlobal("derive"),
 		NRet:    1,
 		Protect: true,
@@ -105,8 +108,8 @@ func (rr *ResourceRegister) Update(amount int) {
 	defer rr.mx.Unlock()
 
 	currAmount := rr.Amount + rr.Reserved
-
 	newAmount := currAmount + amount
+
 	if rr.Cap > 0 {
 		if currAmount == rr.Cap {
 			slog.Debug(
@@ -118,8 +121,10 @@ func (rr *ResourceRegister) Update(amount int) {
 				"reserved", rr.Reserved,
 				"cap", rr.Cap,
 			)
+
 			return
 		}
+
 		if newAmount > rr.Cap {
 			newAmount = rr.Cap
 		}

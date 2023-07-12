@@ -16,7 +16,7 @@ const (
 )
 
 func Setup() {
-	opts := slog.HandlerOptions{
+	opts := slog.HandlerOptions{ // nolint
 		Level: getLevel(),
 	}
 	handler := opts.NewTextHandler(os.Stdout)

@@ -59,14 +59,21 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 			StatusText: http.StatusText(status),
 			Error:      err,
 		}
+
 		render.Status(r, status)
 		render.JSON(w, r, res)
+
 		return
 	}
+
 	slog.Info("getting inventory grain client", "id", common.GetInventoryID(authUUID).String())
+
 	inventory := protobuf.GetInventoryGrainClient(rt.cluster, common.GetInventoryID(authUUID).String())
 
-	res, err := inventory.Describe(&protobuf.DescribeInventoryRequest{})
+	res, err := inventory.Describe(&protobuf.DescribeInventoryRequest{
+		TraceID:   "",
+		Timestamp: timestamppb.Now(),
+	})
 	if err != nil {
 		slog.Error("failed to get inventory", err, "auth", auth, "url", r.URL.String())
 
@@ -76,8 +83,10 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 			StatusText: http.StatusText(status),
 			Error:      err,
 		}
+
 		render.Status(r, status)
 		render.JSON(w, r, res)
+
 		return
 	}
 
@@ -102,8 +111,10 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 			StatusText: http.StatusText(status),
 			Error:      err,
 		}
+
 		render.Status(r, status)
 		render.JSON(w, r, res)
+
 		return
 	}
 
@@ -125,8 +136,10 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 			StatusText: http.StatusText(status),
 			Error:      err,
 		}
+
 		render.Status(r, status)
 		render.JSON(w, r, res)
+
 		return
 	}
 
@@ -140,10 +153,13 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 			StatusText: http.StatusText(status),
 			Error:      err,
 		}
+
 		render.Status(r, status)
 		render.JSON(w, r, res)
+
 		return
 	}
+
 	inventory := protobuf.GetInventoryGrainClient(rt.cluster, common.GetInventoryID(authUUID).String())
 
 	res, err := inventory.Start(&protobuf.StartRequest{
@@ -165,8 +181,10 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 			StatusText: http.StatusText(status),
 			Error:      err,
 		}
+
 		render.Status(r, status)
 		render.JSON(w, r, res)
+
 		return
 	}
 
@@ -183,8 +201,10 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 			StatusText: http.StatusText(status),
 			Error:      err,
 		}
+
 		render.Status(r, status)
 		render.JSON(w, r, res)
+
 		return
 	}
 
@@ -207,5 +227,6 @@ func getBuildingAmount(r BuildRequest) int64 {
 	if amt > maximumBuildingRequest {
 		return maximumBuildingRequest
 	}
+
 	return amt
 }

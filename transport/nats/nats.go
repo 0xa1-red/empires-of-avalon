@@ -2,7 +2,6 @@ package nats
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/nats-io/nats.go"
@@ -32,11 +31,12 @@ func GetConnection() *nats.EncodedConn {
 
 func buildURL() string {
 	url := fmt.Sprintf("%s:%s", viper.GetString(config.NATS_Host), viper.GetString(config.NATS_Port))
+
 	if auth := viper.GetString(config.NATS_User); auth != "" {
-		log.Println(auth)
 		if passwd := viper.GetString(config.NATS_Password); passwd != "" {
 			auth = fmt.Sprintf("%s:%s", auth, passwd)
 		}
+
 		url = fmt.Sprintf("%s@%s", auth, url)
 	}
 

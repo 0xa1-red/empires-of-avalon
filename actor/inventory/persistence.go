@@ -56,6 +56,7 @@ func (g *Grain) Decode(b []byte) error {
 		if len(b.Completed) == 0 {
 			continue
 		}
+
 		slog.Debug("building decode", "name", b.Name, "amount", len(b.Completed))
 
 		for _, gen := range common.Buildings[b.Name].Generators {
@@ -94,12 +95,14 @@ func (g *Grain) Restore(req *protobuf.RestoreRequest, ctx cluster.GrainContext) 
 
 	return &protobuf.RestoreResponse{
 		Status: protobuf.Status_OK,
+		Error:  "",
 	}, nil
 }
 
 func init() {
 	buildingRegisters := make(map[common.BuildingName]*BuildingRegister)
 	resourceRegisters := make(map[common.ResourceName]*ResourceRegister)
+
 	gob.Register(buildingRegisters)
 	gob.Register(resourceRegisters)
 }

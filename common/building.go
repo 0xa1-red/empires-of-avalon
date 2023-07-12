@@ -65,7 +65,7 @@ var Buildings map[BuildingName]Building = map[BuildingName]Building{
 		Name:      Lumberyard,
 		BuildTime: "1s",
 		Cost: []*ResourceCost{
-			{Resource: Wood, Amount: 1, Permanent: false}, // TODO temp for testing
+			{Resource: Wood, Amount: 1, Permanent: false},
 		},
 		Transformers: []blueprints.Transformer{
 			{

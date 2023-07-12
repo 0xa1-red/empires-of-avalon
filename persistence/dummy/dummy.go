@@ -17,11 +17,5 @@ func (p *Persister) Persist(item contract.Persistable) (int, error) {
 }
 
 func (p *Persister) Restore(key string) ([]byte, error) {
-	// 	raw, err := item.Encode()
-	// 	if err != nil {
-	// 		return 0, err
-	// 	}
-
-	// 	return len(raw), nil
 	return nil, nil
 }

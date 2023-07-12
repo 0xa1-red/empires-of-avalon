@@ -92,7 +92,6 @@ linters:
     - exhaustruct
     - exportloopref
     - gocheckcompilerdirectives
-    - gochecknoglobals
     - goconst
     - gocritic
     - godox

@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
@@ -60,7 +59,6 @@ func Setup(path string) {
 
 	err := viper.ReadInConfig()
 	if err != nil {
-		slog.Error("failed to read configuration", err)
-		os.Exit(1)
+		slog.Warn("failed to read config file, using defaults and env vars", "error", err)
 	}
 }

@@ -16,7 +16,8 @@ spec:
     spec:
       containers:
         - name: avalon-backend
-          image: alfreddobradi/avalond:v0.2.0
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 3000
           command:
@@ -24,7 +25,7 @@ spec:
             - "-c"
             - "sleep infinity"
           env:
-            - name: AVALOND_PG_Passwd
+            - name: AVALOND_POSTGRES_PASSWD
               valueFrom:
                 secretKeyRef:
                   name: avalond-prod-pguser-postgres

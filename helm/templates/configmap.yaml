@@ -6,7 +6,6 @@ data:
     config.yaml: |
         postgres:
             user: "postgres"
-            password: "QV_F<TMK0=)}/6nl[[7pdklP"
             host: "avalond-prod-primary.avalond.svc"
             port: "5432"
             database: "postgres"

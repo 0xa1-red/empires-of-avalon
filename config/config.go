@@ -29,6 +29,8 @@ var configs = []struct {
 	// Etcd
 	{ETCD_Endpoints, "ETCD_ENDPOINTS", "127.0.0.1:2379"},
 	{ETCD_Root, "ETCD_ROOT", "/avalond"},
+	{ETCD_User, "ETCD_USER", ""},
+	{ETCD_Passwd, "ETCD_PASSWORD", ""},
 	// NATS
 	{NATS_Host, "NATS_HOST", "127.0.0.1"},
 	{NATS_Port, "NATS_PORT", "4222"},

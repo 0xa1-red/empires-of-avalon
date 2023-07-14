@@ -28,6 +28,8 @@ const (
 const (
 	ETCD_Endpoints = "etcd.endpoints"
 	ETCD_Root      = "etcd.root"
+	ETCD_User      = "etcd.user"
+	ETCD_Passwd    = "etcd.password"
 )
 
 const (

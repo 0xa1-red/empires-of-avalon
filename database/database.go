@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/0xa1-red/empires-of-avalon/config"
@@ -48,11 +49,11 @@ func Connection() *Conn {
 
 func buildDSN() string {
 	return fmt.Sprintf("host=%s dbname=%s port=%s sslmode=%s user=%s password=%s",
-		viper.GetString(config.PG_Host),
-		viper.GetString(config.PG_DB),
-		viper.GetString(config.PG_Port),
-		viper.GetString(config.PG_SSLMode),
-		viper.GetString(config.PG_User),
-		viper.GetString(config.PG_Passwd),
+		url.QueryEscape(viper.GetString(config.PG_Host)),
+		url.QueryEscape(viper.GetString(config.PG_DB)),
+		url.QueryEscape(viper.GetString(config.PG_Port)),
+		url.QueryEscape(viper.GetString(config.PG_SSLMode)),
+		url.QueryEscape(viper.GetString(config.PG_User)),
+		url.QueryEscape(viper.GetString(config.PG_Passwd)),
 	)
 }

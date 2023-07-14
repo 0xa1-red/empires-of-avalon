@@ -47,12 +47,15 @@ func main() {
 	signal.Notify(sigs, os.Interrupt)
 
 	system := actor.NewActorSystem()
-
-	provider, err := etcd.NewWithConfig(viper.GetString(config.ETCD_Root), clientv3.Config{ // nolint
+	etcdConf := clientv3.Config{ // nolint
 		Endpoints:   viper.GetStringSlice(config.ETCD_Endpoints),
 		DialTimeout: 5 * time.Second,
 		DialOptions: []grpc.DialOption{grpc.WithBlock()},
-	})
+		Username:    viper.GetString(config.ETCD_User),
+		Password:    viper.GetString(config.ETCD_Passwd),
+	}
+
+	provider, err := etcd.NewWithConfig(viper.GetString(config.ETCD_Root), etcdConf)
 	if err != nil {
 		log.Fatalf("error creating etcd provider: %v", err)
 	}

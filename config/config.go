@@ -15,11 +15,11 @@ var configs = []struct {
 }{
 	// Postgres
 	{PG_User, "POSTGRES_USER", "postgres"},
-	{PG_Passwd, "POSTGRESS_PASSWD", ""},
-	{PG_Host, "POSTGRESS_HOST", "127.0.0.1"},
-	{PG_Port, "POSTGRESS_PORT", "5432"},
-	{PG_DB, "POSTGRESS_DATABASE", "defaultdb"},
-	{PG_SSLMode, "POSTGRESS_SSLMODE", "disable"},
+	{PG_Passwd, "POSTGRES_PASSWD", ""},
+	{PG_Host, "POSTGRES_HOST", "127.0.0.1"},
+	{PG_Port, "POSTGRES_PORT", "5432"},
+	{PG_DB, "POSTGRES_DATABASE", "defaultdb"},
+	{PG_SSLMode, "POSTGRES_SSLMODE", "disable"},
 	// Cluster
 	{Cluster_Name, "CLUSTER_NAME", "avalond"},
 	{Node_Host, "CLUSTER_NODE_HOST", "0.0.0.0"},

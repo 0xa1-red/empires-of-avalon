@@ -6,43 +6,43 @@ const (
 )
 
 const (
-	PG_User    = "Postgres.User"
-	PG_Passwd  = "Postgres.Password"
-	PG_Host    = "Postgres.Host"
-	PG_Port    = "Postgres.Port"
-	PG_DB      = "Postgres.Database"
-	PG_SSLMode = "Postgres.SSLMode"
+	PG_User    = "postgres.user"
+	PG_Passwd  = "postgres.password"
+	PG_Host    = "postgres.host"
+	PG_Port    = "postgres.port"
+	PG_DB      = "postgres.database"
+	PG_SSLMode = "postgres.sslmode"
 )
 
 const (
-	Cluster_Name = "Cluster.Name"
-	Node_Host    = "Cluster.Node.Host"
-	Node_Port    = "Cluster.Node.Port"
+	Cluster_Name = "cluster.name"
+	Node_Host    = "cluster.node.host"
+	Node_Port    = "cluster.node.port"
 )
 
 const (
-	HTTP_Address = "HTTP.Address"
-	HTTP_Port    = "HTTP.Port"
+	HTTP_Address = "http.address"
+	HTTP_Port    = "http.port"
 )
 
 const (
-	ETCD_Endpoints = "ETCD.Endpoints"
-	ETCD_Root      = "ETCD.Root"
+	ETCD_Endpoints = "etcd.endpoints"
+	ETCD_Root      = "etcd.root"
 )
 
 const (
-	NATS_Host     = "NATS.Host"
-	NATS_Port     = "NATS.Port"
-	NATS_User     = "NATS.User"
-	NATS_Password = "NATS.Password"
+	NATS_Host     = "nats.host"
+	NATS_Port     = "nats.port"
+	NATS_User     = "nats.user"
+	NATS_Password = "nats.password"
 )
 
 const (
-	Logging_Level = "Logging.Level"
+	Logging_Level = "logging.level"
 )
 
 const (
-	Persistence_Encoding = "Persistence.Encoding"
+	Persistence_Encoding = "persistence.encoding"
 
 	EncodingGob  = "gob"
 	EncodingJson = "json"

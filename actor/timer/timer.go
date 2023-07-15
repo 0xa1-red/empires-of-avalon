@@ -92,6 +92,7 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 
 func (g *Grain) startBuildingTimer() {
 	now := time.Now()
+
 	conn, err := nats.GetConnection()
 	if err != nil {
 		slog.Error("failed to get NATS connection", err)
@@ -138,6 +139,7 @@ func (g *Grain) startBuildingTimer() {
 
 func (g *Grain) startGenerateTimer() {
 	now := time.Now()
+
 	conn, err := nats.GetConnection()
 	if err != nil {
 		slog.Error("failed to get NATS connection", err)

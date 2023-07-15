@@ -18,6 +18,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/logging"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
+	"github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"github.com/asynkron/protoactor-go/actor"
 	"github.com/asynkron/protoactor-go/cluster"
 	"github.com/asynkron/protoactor-go/cluster/clusterproviders/etcd"
@@ -43,6 +44,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if _, err := nats.GetConnection(); err != nil {
+		slog.Error("failed to connect to NATS", err)
+		os.Exit(1)
+	}
+
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
 
@@ -54,6 +60,11 @@ func main() {
 		Username:    viper.GetString(config.ETCD_User),
 		Password:    viper.GetString(config.ETCD_Passwd),
 	}
+
+	slog.Debug("creating etcd provider",
+		"endpoints", viper.GetStringSlice(config.ETCD_Endpoints),
+		"username", viper.GetString(config.ETCD_User),
+	)
 
 	provider, err := etcd.NewWithConfig(viper.GetString(config.ETCD_Root), etcdConf)
 	if err != nil {

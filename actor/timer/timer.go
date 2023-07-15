@@ -92,7 +92,11 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 
 func (g *Grain) startBuildingTimer() {
 	now := time.Now()
-	conn := nats.GetConnection()
+
+	conn, err := nats.GetConnection()
+	if err != nil {
+		slog.Error("failed to get NATS connection", err)
+	}
 
 	d, err := structpb.NewValue(g.timer.Data)
 	if err != nil {
@@ -135,7 +139,11 @@ func (g *Grain) startBuildingTimer() {
 
 func (g *Grain) startGenerateTimer() {
 	now := time.Now()
-	conn := nats.GetConnection()
+
+	conn, err := nats.GetConnection()
+	if err != nil {
+		slog.Error("failed to get NATS connection", err)
+	}
 
 	d, err := structpb.NewValue(g.timer.Data)
 	if err != nil {
@@ -174,9 +182,13 @@ func (g *Grain) startGenerateTimer() {
 
 func (g *Grain) startTransformTimer() {
 	now := time.Now()
-	conn := nats.GetConnection()
-	d, err := structpb.NewValue(g.timer.Data)
 
+	conn, err := nats.GetConnection()
+	if err != nil {
+		slog.Error("failed to get NATS connection", err)
+	}
+
+	d, err := structpb.NewValue(g.timer.Data)
 	if err != nil {
 		slog.Error("failed to start timer", err)
 	}

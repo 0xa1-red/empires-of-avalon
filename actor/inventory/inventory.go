@@ -415,7 +415,13 @@ func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
 
 func (g *Grain) subscribeToCallback(cb *Callback) error {
 	subject := cb.Subject
-	sub, err := intnats.GetConnection().Subscribe(subject, cb.Method)
+
+	transport, err := intnats.GetConnection()
+	if err != nil {
+		return err
+	}
+
+	sub, err := transport.Subscribe(subject, cb.Method)
 
 	if err != nil {
 		return err

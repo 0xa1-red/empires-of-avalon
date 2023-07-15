@@ -10,32 +10,34 @@ import (
 
 func TestBuildURL(t *testing.T) {
 	tests := []struct {
-		host     string
-		port     string
-		user     string
-		passwd   string
-		expected string
+		host            string
+		port            string
+		user            string
+		passwd          string
+		expectedConnect string
+		expectedString  string
 	}{
 		{
-			expected: "nats://127.0.0.1:4222",
+			expectedConnect: "nats://127.0.0.1:4222",
 		},
 		{
-			host:     "192.168.1.1",
-			port:     "6222",
-			expected: "nats://192.168.1.1:6222",
+			host:            "192.168.1.1",
+			port:            "6222",
+			expectedConnect: "nats://192.168.1.1:6222",
 		},
 		{
-			host:     "192.168.1.1",
-			port:     "6222",
-			user:     "testuser",
-			expected: "nats://testuser@192.168.1.1:6222",
+			host:            "192.168.1.1",
+			port:            "6222",
+			user:            "testuser",
+			expectedConnect: "nats://testuser@192.168.1.1:6222",
 		},
 		{
-			host:     "192.168.1.1",
-			port:     "6222",
-			user:     "testuser",
-			passwd:   "testpassword",
-			expected: "nats://testuser:testpassword@192.168.1.1:6222",
+			host:            "192.168.1.1",
+			port:            "6222",
+			user:            "testuser",
+			passwd:          "testpassword",
+			expectedConnect: "nats://testuser:testpassword@192.168.1.1:6222",
+			expectedString:  "nats://testuser:*****@192.168.1.1:6222",
 		},
 	}
 
@@ -56,8 +58,15 @@ func TestBuildURL(t *testing.T) {
 				viper.Set(config.NATS_Password, tt.passwd)
 			}
 
-			if actual, expected := buildURL(), tt.expected; actual != expected {
+			u := buildURL()
+			if actual, expected := u.connect(), tt.expectedConnect; actual != expected {
 				t.Fatalf("FAIL: expected %s, got %s", expected, actual)
+			}
+
+			if tt.expectedString != "" {
+				if actual, expected := u.String(), tt.expectedString; actual != expected {
+					t.Fatalf("FAIL: expected %s, got %s", expected, actual)
+				}
 			}
 		}
 

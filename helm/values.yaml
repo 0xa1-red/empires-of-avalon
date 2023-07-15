@@ -1,0 +1,16 @@
+image:
+  repository: alfreddobradi/avalond
+  pullPolicy: Always
+
+postgresql:
+  enabled: true
+nats:
+  enabled: true
+  auth:
+    enabled: false
+etcd:
+  enabled: true
+  auth:
+    rbac:
+      existingSecret: avalond-prod-etcd
+      existingSecretPasswordKey: etcd-root-password

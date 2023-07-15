@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: avalond
+  labels:
+    app: avalond
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: avalond
+  template:
+    metadata:
+      labels:
+        app: avalond
+        app.kubernetes.io/name: avalond
+    spec:
+      containers:
+        - name: avalon-backend
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 3000
+          env:
+            - name: AD_POSTGRES_PASSWD
+              valueFrom:
+                secretKeyRef:
+                  name: avalond-prod-pguser-postgres
+                  key: password
+            - name: AD_ETCD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: avalond-prod-etcd
+                  key: etcd-root-password
+          volumeMounts:
+            - name: config
+              mountPath: "/etc/avalond"
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: avalond-config-file

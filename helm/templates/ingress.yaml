@@ -1,0 +1,24 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: avalon-backend
+  annotations:
+    cert-manager.io/cluster-issuer: "cluster-letsencrypt-prod"
+    kubernetes.io/tls-acme: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: "dev.game.avalon.cool"
+      http:
+        paths:
+          - pathType: Prefix
+            path: "/"
+            backend:
+              service:
+                name: avalon-daemon
+                port:
+                  number: 8443
+  tls:
+    - hosts:
+        - dev.game.avalon.cool
+      secretName: avalond-dev

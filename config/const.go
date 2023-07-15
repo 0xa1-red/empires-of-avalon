@@ -2,7 +2,7 @@
 package config
 
 const (
-	envPrefix = "AVALOND"
+	envPrefix = "AD"
 )
 
 const (

@@ -5,7 +5,9 @@ image:
 postgresql:
   enabled: true
 nats:
-  enabled: false
+  enabled: true
+  auth:
+    enabled: false
 etcd:
   enabled: true
   auth:

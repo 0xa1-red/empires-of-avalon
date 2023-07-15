@@ -13,6 +13,7 @@ spec:
     metadata:
       labels:
         app: avalond
+        app.kubernetes.io/name: avalond
     spec:
       containers:
         - name: avalon-backend
@@ -20,18 +21,17 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 3000
-          command:
-            - /bin/sh
-            - "-c"
-            - "sleep infinity"
           env:
-            - name: AVALOND_POSTGRES_PASSWD
+            - name: AD_POSTGRES_PASSWD
               valueFrom:
                 secretKeyRef:
                   name: avalond-prod-pguser-postgres
                   key: password
-            - name: AVALOND_NATS_PASSWORD
-              value: ""
+            - name: AD_ETCD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: avalond-prod-etcd
+                  key: etcd-root-password
           volumeMounts:
             - name: config
               mountPath: "/etc/avalond"
@@ -40,7 +40,3 @@ spec:
         - name: config
           configMap:
             name: avalond-config-file
-      # - name: avalon-backend
-      #   image: alfreddobradi/avalond:v0.2.0
-      #   ports:
-      #   - containerPort: 3000

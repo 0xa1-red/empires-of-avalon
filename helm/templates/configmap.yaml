@@ -20,12 +20,31 @@ data:
             port: "3000"
         etcd:
             endpoints:
-                - avalond-etcd-0.avalond.svc.cluster.local:22379
+                - avalond-etcd.avalond.svc.cluster.local:2379
             root: "avalond"
+            user: "root"
         nats:
-            host: avalond-nats-0.avalond.svc.cluster.local
+            host: avalond-nats.avalond.svc.cluster.local
             port: 4222
-            user: ""
-            password: ""
         logging:
             level: debug
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: avalond-psql-init
+data:
+  init.sql: |-
+    CREATE TABLE snapshots (
+        kind varchar(255) not null,
+        identity uuid not null,
+        data blob not null,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE blueprints (
+        id uuid not null,
+        kind varchar(255) not null,
+        data json not null,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );

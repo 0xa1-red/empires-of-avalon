@@ -38,7 +38,7 @@ func ServeMetrics(wg *sync.WaitGroup) {
 	mux := &http.ServeMux{}
 	mux.Handle("/metrics", promhttp.Handler())
 
-	server := &http.Server{ // nolint:exhaustruct
+	server = &http.Server{ // nolint:exhaustruct
 		Addr:         ":2223",
 		ReadTimeout:  1 * time.Second,
 		WriteTimeout: 1 * time.Second,

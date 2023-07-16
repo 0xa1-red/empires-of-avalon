@@ -15,6 +15,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/database"
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
+	"github.com/0xa1-red/empires-of-avalon/instrumentation/metrics"
 	"github.com/0xa1-red/empires-of-avalon/logging"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -106,9 +107,14 @@ func main() {
 		viper.GetString(config.HTTP_Port))
 	go startServer(wg, bindAddress)
 
+	wg.Add(1)
+
+	go metrics.ServeMetrics(wg)
+
 	<-sigs
 
-	server.Shutdown(context.Background()) // nolint
+	server.Shutdown(context.Background())  // nolint:errcheck
+	metrics.Shutdown(context.Background()) // nolint:errcheck
 	wg.Wait()
 	c.Shutdown(true)
 }

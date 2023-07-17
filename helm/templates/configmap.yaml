@@ -28,6 +28,10 @@ data:
             port: 4222
         logging:
             level: debug
+        instrumentation:
+            traces:
+                endpoint: loki-stack-tempo.loki-stack.svc.cluster.local:4318
+                insecure: true
 ---
 apiVersion: v1
 kind: ConfigMap

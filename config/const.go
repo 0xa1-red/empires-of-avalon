@@ -49,3 +49,8 @@ const (
 	EncodingGob  = "gob"
 	EncodingJson = "json"
 )
+
+const (
+	Instrumentation_Traces_Endpoint = "instrumentation.traces.endpoint"
+	Instrumentation_Traces_Insecure = "instrumentation.traces.insecure"
+)

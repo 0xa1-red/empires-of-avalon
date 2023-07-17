@@ -1,6 +1,7 @@
 package inventory
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/common"
+	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	intnats "github.com/0xa1-red/empires-of-avalon/transport/nats"
@@ -15,6 +17,8 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -136,6 +140,13 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}
 
 func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*protobuf.StartResponse, error) {
+	carrier := propagation.MapCarrier{}
+	carrier.Set("traceparent", req.TraceID)
+	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+
+	sctx, span := traces.Start(pctx, "actor/inventory/describe")
+	defer span.End()
+
 	b, ok := common.Buildings[common.BuildingName(req.Name)]
 	if !ok {
 		return &protobuf.StartResponse{
@@ -186,9 +197,11 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	buildingID := uuid.New()
 	slog.Info("requested building", "name", string(b.Name), "id", buildingID.String())
 
+	otel.GetTextMapPropagator().Inject(sctx, &carrier)
+
 	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
-		TraceID:     "",
+		TraceID:     carrier.Get("traceparent"),
 		Kind:        protobuf.TimerKind_Building,
 		Reply:       g.callbacks[CallbackBuildings].Subject,
 		InventoryID: g.ctx.Identity(),
@@ -244,7 +257,14 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	}, nil
 }
 
-func (g *Grain) Describe(_ *protobuf.DescribeInventoryRequest, ctx cluster.GrainContext) (*protobuf.DescribeInventoryResponse, error) {
+func (g *Grain) Describe(req *protobuf.DescribeInventoryRequest, ctx cluster.GrainContext) (*protobuf.DescribeInventoryResponse, error) {
+	carrier := propagation.MapCarrier{}
+	carrier.Set("traceparent", req.TraceID)
+	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+
+	_, span := traces.Start(pctx, "actor/inventory/describe")
+	defer span.End()
+
 	buildingValues := make(map[string]*structpb.Value)
 	resourceValues := make(map[string]*structpb.Value)
 

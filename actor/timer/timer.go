@@ -1,13 +1,17 @@
 package timer
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"github.com/asynkron/protoactor-go/cluster"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -45,10 +49,18 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}
 
 func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext) (*protobuf.TimerResponse, error) {
+	carrier := propagation.MapCarrier{}
+	carrier.Set("traceparent", req.TraceID)
+	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+
+	_, span := traces.Start(pctx, "actor/timer/create_timer")
+	defer span.End()
+
 	start := time.Now()
 
 	d, err := time.ParseDuration(req.Duration)
 	if err != nil {
+		span.RecordError(err)
 		return &protobuf.TimerResponse{ // nolint
 			Status:    protobuf.Status_Error,
 			Error:     err.Error(),

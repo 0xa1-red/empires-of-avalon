@@ -38,6 +38,7 @@ services:
     ports:
       - 16686:16686
       - 4318:4318
+      - 14269:14269
 
 volumes:
   roach-data:

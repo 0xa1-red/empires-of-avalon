@@ -16,6 +16,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/database"
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/metrics"
+	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/logging"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -40,14 +41,16 @@ func main() {
 	config.Setup(configPath)
 	logging.Setup()
 
+	setupInstrumentation()
+
 	if err := database.CreateConnection(); err != nil {
 		slog.Error("failed to connect to database", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	if _, err := nats.GetConnection(); err != nil {
 		slog.Error("failed to connect to NATS", err)
-		os.Exit(1)
+		exit(1)
 	}
 
 	sigs := make(chan os.Signal, 1)
@@ -110,11 +113,38 @@ func main() {
 	wg.Add(1)
 
 	go metrics.ServeMetrics(wg)
-
 	<-sigs
 
-	server.Shutdown(context.Background())  // nolint:errcheck
-	metrics.Shutdown(context.Background()) // nolint:errcheck
+	if err := server.Shutdown(context.Background()); err != nil {
+		slog.Warn("failed to stop HTTP server", "error", err)
+	}
+
+	if err := metrics.Shutdown(context.Background()); err != nil {
+		slog.Warn("failed to stop metrics server", "error", err)
+	}
+
 	wg.Wait()
 	c.Shutdown(true)
+
+	if err := traces.Shutdown(context.Background()); err != nil {
+		slog.Warn("failed to shut trace exporter down", "error", err)
+	}
+}
+
+func exit(code int) {
+	if err := traces.Shutdown(context.Background()); err != nil {
+		slog.Warn("failed to shut trace exporter down", "error", err)
+	}
+
+	os.Exit(code)
+}
+
+func setupInstrumentation() {
+	if err := metrics.RegisterMetricsPipeline(); err != nil {
+		slog.Warn("failed to register metrics pipeline", "error", err)
+	}
+
+	if err := traces.RegisterTracesPipeline(); err != nil {
+		slog.Warn("failed to register traces pipeline", "error", err)
+	}
 }

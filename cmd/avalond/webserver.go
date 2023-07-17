@@ -7,6 +7,7 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/api"
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
+	intmw "github.com/0xa1-red/empires-of-avalon/http/middleware"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"golang.org/x/exp/slog"
@@ -20,7 +21,7 @@ func startServer(wg *sync.WaitGroup, addr string) {
 	s := chi.NewRouter()
 
 	s.Use(middleware.Logger)
-	s.Use(middleware.RequestID)
+	s.Use(intmw.AvalonLogger)
 	s.Use(middleware.AllowContentType("application/json"))
 	s.Use(middleware.Timeout(60 * time.Second))
 

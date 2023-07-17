@@ -6,6 +6,11 @@ spec:
   selector:
     app.kubernetes.io/name: avalond
   ports:
-    - protocol: TCP
+    - name: http
+      protocol: TCP
       port: 8443
       targetPort: 3000
+    - name: metrics
+      protocol: TCP
+      port: 2223
+      targetPort: 2223

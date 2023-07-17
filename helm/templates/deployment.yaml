@@ -14,6 +14,8 @@ spec:
       labels:
         app: avalond
         app.kubernetes.io/name: avalond
+        prometheus.io/port: "2223"
+        prometheus.io/scrape: "true"
     spec:
       containers:
         - name: avalon-backend

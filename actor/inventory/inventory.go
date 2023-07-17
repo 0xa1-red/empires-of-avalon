@@ -144,7 +144,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	carrier.Set("traceparent", req.TraceID)
 	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
 
-	sctx, span := traces.Start(pctx, "actor/inventory/describe")
+	sctx, span := traces.Start(pctx, "actor/inventory/start")
 	defer span.End()
 
 	b, ok := common.Buildings[common.BuildingName(req.Name)]
@@ -552,6 +552,13 @@ func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
 }
 
 func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) (*protobuf.ReserveResponse, error) {
+	carrier := propagation.MapCarrier{}
+	carrier.Set("traceparent", req.TraceID)
+	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+
+	_, span := traces.Start(pctx, "actor/inventory/reserve")
+	defer span.End()
+
 	resources := req.Resources.AsMap()
 
 	var err error

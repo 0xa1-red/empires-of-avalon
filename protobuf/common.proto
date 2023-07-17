@@ -79,8 +79,9 @@ message RestoreResponse {
 }
 
 message ReserveRequest {
-    google.protobuf.Struct Resources = 1;
-    google.protobuf.Timestamp Timestamp = 2;
+    string TraceID = 1;
+    google.protobuf.Struct Resources = 2;
+    google.protobuf.Timestamp Timestamp = 3;
 }
 
 message ReserveResponse {

@@ -57,10 +57,8 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 	defer span.End()
 
 	ctx = context.WithValue(ctx, middleware.RequestIDKey, span.SpanContext().TraceID())
-
 	r = r.WithContext(ctx)
 
-	fmt.Println(r.Context().Value(middleware.RequestIDKey))
 	w.Header().Set("X-Trace-Id", span.SpanContext().TraceID().String())
 
 	auth := r.Header.Get("Authorization")
@@ -118,6 +116,11 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 	ctx, span := traces.Start(r.Context(), "api/router/build")
 	defer span.End()
+
+	ctx = context.WithValue(ctx, middleware.RequestIDKey, span.SpanContext().TraceID())
+	r = r.WithContext(ctx)
+
+	w.Header().Set("X-Trace-Id", span.SpanContext().TraceID().String())
 
 	auth := r.Header.Get("Authorization")
 

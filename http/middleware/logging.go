@@ -53,7 +53,7 @@ func AvalonLogger(next http.Handler) http.Handler {
 			"user_agent", r.UserAgent(),
 		}
 
-		reqID := "HTTP request"
+		reqID := ""
 		if val := r.Context().Value(RequestIDKey); val != nil {
 			reqID = val.(string)
 		}
@@ -66,7 +66,7 @@ func AvalonLogger(next http.Handler) http.Handler {
 			fields = append(fields, "trace_id", reqID)
 		}
 
-		slog.Info("",
+		slog.Info("HTTP Request",
 			fields...,
 		)
 	}

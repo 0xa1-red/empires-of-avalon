@@ -21,6 +21,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/0xa1-red/empires-of-avalon/transport/nats"
+	"github.com/0xa1-red/empires-of-avalon/version"
 	"github.com/asynkron/protoactor-go/actor"
 	"github.com/asynkron/protoactor-go/cluster"
 	"github.com/asynkron/protoactor-go/cluster/clusterproviders/etcd"
@@ -32,11 +33,20 @@ import (
 	"google.golang.org/grpc"
 )
 
-var configPath string
+var (
+	configPath   string
+	printVersion bool
+)
 
 func main() {
+	flag.BoolVar(&printVersion, "version", false, "print version information")
 	flag.StringVar(&configPath, "config-file", "", "path to config file")
 	flag.Parse()
+
+	if printVersion {
+		version.Print()
+		os.Exit(0)
+	}
 
 	config.Setup(configPath)
 	logging.Setup()

@@ -1,6 +1,7 @@
 package instrumentation
 
 import (
+	"github.com/0xa1-red/empires-of-avalon/version"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 )
@@ -11,7 +12,7 @@ func Resource() (*resource.Resource, error) {
 		resource.NewWithAttributes(
 			semconv.SchemaURL,
 			semconv.ServiceName("avalond"),
-			semconv.ServiceVersion("0.10.2"), // Replace this with dynamic version after EOA-37
+			semconv.ServiceVersion(version.Tag),
 		),
 	)
 }

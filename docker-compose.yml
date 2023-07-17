@@ -31,6 +31,14 @@ services:
     ports:
       - 22379:2379
       - 22380:2380
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - 16686:16686
+      - 4318:4318
+      - 14269:14269
 
 volumes:
   roach-data:

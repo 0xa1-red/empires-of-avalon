@@ -2,6 +2,7 @@ package timer
 
 import (
 	"bytes"
+	"context"
 	"encoding/gob"
 
 	"github.com/0xa1-red/empires-of-avalon/persistence/encoding"
@@ -61,9 +62,9 @@ func (g *Grain) Restore(req *protobuf.RestoreRequest, ctx cluster.GrainContext) 
 		}, nil
 	}
 
-	g.startBuildingTimer()
-	g.startGenerateTimer()
-	g.startTransformTimer()
+	g.startBuildingTimer(context.TODO())
+	g.startGenerateTimer(context.TODO())
+	g.startTransformTimer(context.TODO())
 
 	return &protobuf.RestoreResponse{
 		Status: protobuf.Status_OK,

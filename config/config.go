@@ -40,6 +40,9 @@ var configs = []struct {
 	{Logging_Level, "LOGGING_LEVEL", "info"},
 	// Persistence
 	{Persistence_Encoding, "PERSISTENCE_ENCODING", EncodingGob},
+	// Instrumentation
+	{Instrumentation_Traces_Endpoint, "INSTRUMENTATION_TRACES_ENDPOINT", "localhost:4318"},
+	{Instrumentation_Traces_Insecure, "INSTRUMENTATION_TRACES_INSECURE", false},
 }
 
 func Setup(path string) {

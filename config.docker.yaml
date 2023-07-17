@@ -25,3 +25,7 @@ nats:
   password: ""
 logging:
   level: debug
+instrumentation:
+  traces:
+    endpoint: localhost:4318
+    insecure: true

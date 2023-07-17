@@ -1,13 +1,17 @@
 package timer
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"github.com/asynkron/protoactor-go/cluster"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -45,10 +49,18 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}
 
 func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext) (*protobuf.TimerResponse, error) {
+	carrier := propagation.MapCarrier{}
+	carrier.Set("traceparent", req.TraceID)
+	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+
+	sctx, span := traces.Start(pctx, "actor/timer/create_timer")
+	defer span.End()
+
 	start := time.Now()
 
 	d, err := time.ParseDuration(req.Duration)
 	if err != nil {
+		span.RecordError(err)
 		return &protobuf.TimerResponse{ // nolint
 			Status:    protobuf.Status_Error,
 			Error:     err.Error(),
@@ -77,7 +89,7 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 		timerFn = g.startTransformTimer
 	}
 
-	go timerFn()
+	go timerFn(sctx)
 
 	deadline := start
 	deadline = deadline.Add(d)
@@ -90,7 +102,10 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 	}, nil
 }
 
-func (g *Grain) startBuildingTimer() {
+func (g *Grain) startBuildingTimer(ctx context.Context) {
+	_, span := traces.Start(ctx, "actor/timer/startBuildingTimer")
+	defer span.End()
+
 	now := time.Now()
 
 	conn, err := nats.GetConnection()
@@ -137,7 +152,10 @@ func (g *Grain) startBuildingTimer() {
 	}
 }
 
-func (g *Grain) startGenerateTimer() {
+func (g *Grain) startGenerateTimer(ctx context.Context) {
+	_, span := traces.Start(ctx, "actor/timer/create_timer")
+	defer span.End()
+
 	now := time.Now()
 
 	conn, err := nats.GetConnection()
@@ -180,7 +198,10 @@ func (g *Grain) startGenerateTimer() {
 	}
 }
 
-func (g *Grain) startTransformTimer() {
+func (g *Grain) startTransformTimer(ctx context.Context) {
+	ctx, span := traces.Start(ctx, "actor/timer/create_timer")
+	defer span.End()
+
 	now := time.Now()
 
 	conn, err := nats.GetConnection()
@@ -211,7 +232,7 @@ func (g *Grain) startTransformTimer() {
 
 	for {
 		send := true
-		if err := g.reserveResources(); err != nil {
+		if err := g.reserveResources(ctx); err != nil {
 			send = false
 		}
 
@@ -234,8 +255,11 @@ func (g *Grain) startTransformTimer() {
 	}
 }
 
-func (g *Grain) reserveResources() error {
-	resources, err := getResourcesFromTimer(g.timer)
+func (g *Grain) reserveResources(ctx context.Context) error {
+	ctx, span := traces.Start(ctx, "actor/timer/reserve_resources")
+	defer span.End()
+
+	resources, err := getResourcesFromTimer(ctx, g.timer)
 	if err != nil {
 		return fmt.Errorf("failed to get resources: %w", err)
 	}
@@ -247,8 +271,12 @@ func (g *Grain) reserveResources() error {
 		return err
 	}
 
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, &carrier)
+
 	ig := protobuf.GetInventoryGrainClient(g.ctx.Cluster(), g.timer.InventoryID)
 	msg := protobuf.ReserveRequest{
+		TraceID:   carrier.Get("traceparent"),
 		Resources: r.GetStructValue(),
 		Timestamp: timestamppb.Now(),
 	}
@@ -265,7 +293,10 @@ func (g *Grain) reserveResources() error {
 	return nil
 }
 
-func getResourcesFromTimer(t *Timer) (map[string]interface{}, error) {
+func getResourcesFromTimer(ctx context.Context, t *Timer) (map[string]interface{}, error) {
+	_, span := traces.Start(ctx, "actor/timer/get_resources_from_timer")
+	defer span.End()
+
 	resources := make(map[string]interface{})
 
 	costs, ok := t.Data["cost"].([]interface{})

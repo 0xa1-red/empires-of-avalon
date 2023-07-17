@@ -19,9 +19,10 @@ enum TimerKind {
 }
 
 message StartRequest {
-    string Name = 1;
-    int64 Amount = 2;
-    google.protobuf.Timestamp Timestamp = 3;
+    string TraceID = 1;
+    string Name = 2;
+    int64 Amount = 3;
+    google.protobuf.Timestamp Timestamp = 4;
 }
 
 message StartResponse {
@@ -78,8 +79,9 @@ message RestoreResponse {
 }
 
 message ReserveRequest {
-    google.protobuf.Struct Resources = 1;
-    google.protobuf.Timestamp Timestamp = 2;
+    string TraceID = 1;
+    google.protobuf.Struct Resources = 2;
+    google.protobuf.Timestamp Timestamp = 3;
 }
 
 message ReserveResponse {

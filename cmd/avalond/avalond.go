@@ -19,6 +19,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/logging"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
+	"github.com/0xa1-red/empires-of-avalon/pkg/auth"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"github.com/0xa1-red/empires-of-avalon/version"
@@ -52,6 +53,16 @@ func main() {
 	logging.Setup()
 
 	setupInstrumentation()
+
+	if err := auth.Init(); err != nil {
+		slog.Error("failed to set up authenticator", err)
+		exit(1)
+	}
+
+	if _, err := auth.GetToken(); err != nil {
+		slog.Error("failed to get management access token", err)
+		exit(1)
+	}
 
 	if err := database.CreateConnection(); err != nil {
 		slog.Error("failed to connect to database", err)

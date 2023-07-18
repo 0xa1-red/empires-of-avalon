@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/pkg/auth"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/go-chi/chi"
 	session "github.com/go-session/session/v3"
 	"github.com/spf13/viper"
@@ -34,14 +32,14 @@ func NewRouter() *Router {
 	r.Get("/login", router.Login)
 	r.Get("/logout", router.Logout)
 	r.Get("/callback", router.Callback)
-	r.Get("/profile", router.Profile)
-	r.With(auth.IsAuthenticated).Get("/test", router.Test)
+	// r.Get("/profile", router.Profile)
+	// r.With(auth.IsAuthenticated).Get("/test", router.Test)
 
 	return router
 }
 
 func (rt *Router) Login(w http.ResponseWriter, r *http.Request) {
-	store, err := session.Start(context.Background(), w, r)
+	store, err := session.Start(r.Context(), w, r)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -65,7 +63,7 @@ func (rt *Router) Login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *Router) Callback(w http.ResponseWriter, r *http.Request) {
-	store, err := session.Start(context.Background(), w, r)
+	store, err := session.Start(r.Context(), w, r)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -102,6 +100,7 @@ func (rt *Router) Callback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+
 	store.Set("userprofile", userProfile)
 
 	if err := store.Save(); err != nil {
@@ -113,28 +112,19 @@ func (rt *Router) Callback(w http.ResponseWriter, r *http.Request) {
 }
 
 func (rt *Router) Logout(w http.ResponseWriter, r *http.Request) {
-	store, err := session.Start(context.Background(), w, r)
-	if err != nil {
-		fmt.Fprint(w, err)
-		return
-	}
-
-	store.Delete("foo")
-	if err = store.Save(); err != nil {
-		fmt.Fprint(w, err)
-	}
-
 	logoutUrl, err := url.Parse("https://" + viper.GetString(config.Authenticator_Domain) + "/auth/logout")
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
-	returnTo, err := url.Parse("http://localhost:3000")
+	returnTo, err := url.Parse(viper.GetString(config.Authenticator_Callback))
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
+
+	returnTo.Path = ""
 
 	parameters := url.Values{}
 	parameters.Add("returnTo", returnTo.String())
@@ -144,30 +134,30 @@ func (rt *Router) Logout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, logoutUrl.String(), http.StatusTemporaryRedirect)
 }
 
-func (rt *Router) Profile(w http.ResponseWriter, r *http.Request) {
-	store, err := session.Start(context.Background(), w, r)
-	if err != nil {
-		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
-		return
-	}
+// func (rt *Router) Profile(w http.ResponseWriter, r *http.Request) {
+// 	store, err := session.Start(r.Context(), w, r)
+// 	if err != nil {
+// 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+// 		return
+// 	}
 
-	profile, ok := store.Get("profile")
-	if !ok {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
+// 	profile, ok := store.Get("profile")
+// 	if !ok {
+// 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+// 		return
+// 	}
 
-	userProfile, ok := store.Get("userprofile")
-	if !ok {
-		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
-		return
-	}
+// 	userProfile, ok := store.Get("userprofile")
+// 	if !ok {
+// 		http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+// 		return
+// 	}
 
-	spew.Fdump(w, profile)
-	spew.Fdump(w, userProfile)
+// 	spew.Fdump(w, profile)
+// 	spew.Fdump(w, userProfile)
 
-	// spew.Fdump(w, profile)
-}
+// 	// spew.Fdump(w, profile)
+// }
 
 func getUserProfile(id string) (map[string]interface{}, error) {
 	managementURL := fmt.Sprintf("https://%s/api/v2/users/%s", viper.GetString(config.Authenticator_Domain), id)
@@ -204,10 +194,10 @@ func getUserProfile(id string) (map[string]interface{}, error) {
 	return profile, nil
 }
 
-func (rt *Router) Test(w http.ResponseWriter, r *http.Request) {
-	prof := r.Context().Value(auth.ContextProfile)
-	userProf := r.Context().Value(auth.ContextUserProfile)
+// func (rt *Router) Test(w http.ResponseWriter, r *http.Request) {
+// 	prof := r.Context().Value(auth.ContextProfile)
+// 	userProf := r.Context().Value(auth.ContextUserProfile)
 
-	spew.Fdump(w, prof)
-	spew.Fdump(w, userProf)
-}
+// 	spew.Fdump(w, prof)
+// 	spew.Fdump(w, userProf)
+// }

@@ -19,7 +19,7 @@ const (
 // the user has already been authenticated previously.
 func IsAuthenticated(next http.Handler) http.Handler {
 	fn := func(w http.ResponseWriter, r *http.Request) {
-		store, err := session.Start(context.Background(), w, r)
+		store, err := session.Start(r.Context(), w, r)
 		if err != nil {
 			http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 			return

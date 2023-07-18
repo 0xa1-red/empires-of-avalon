@@ -80,6 +80,7 @@ func (a *Authenticator) VerifyIDToken(ctx context.Context, token *oauth2.Token) 
 
 func GenerateNonce() (string, error) {
 	b := make([]byte, 32)
+
 	_, err := rand.Read(b)
 	if err != nil {
 		return "", err

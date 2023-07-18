@@ -34,6 +34,7 @@ func GetToken() (*Token, error) {
 		}
 
 		w := bytes.NewBuffer([]byte(""))
+
 		encoder := json.NewEncoder(w)
 		if err := encoder.Encode(payload); err != nil {
 			return nil, err

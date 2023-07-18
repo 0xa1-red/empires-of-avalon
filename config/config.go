@@ -43,6 +43,11 @@ var configs = []struct {
 	// Instrumentation
 	{Instrumentation_Traces_Endpoint, "INSTRUMENTATION_TRACES_ENDPOINT", "localhost:4318"},
 	{Instrumentation_Traces_Insecure, "INSTRUMENTATION_TRACES_INSECURE", false},
+	// Authentication
+	{Authenticator_Domain, "AUTHENTICATOR_DOMAIN", ""},
+	{Authenticator_Client_ID, "AUTHENTICATOR_CLIENT_ID", ""},
+	{Authenticator_Client_Secret, "AUTHENTICATOR_CLIENT_SECRET", ""},
+	{Authenticator_Callback, "AUTHENTICATOR_CALLBACK", "http://localhost:3000/auth/callback"},
 }
 
 func Setup(path string) {

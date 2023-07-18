@@ -9,6 +9,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/http/middleware"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
+	"github.com/0xa1-red/empires-of-avalon/pkg/auth"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
 	"github.com/go-chi/chi"
@@ -36,8 +37,12 @@ func NewRouter(c *cluster.Cluster) *Router {
 	}
 
 	r.Get("/", router.Index)
-	r.Get("/inventory", router.Inventory)
-	r.Post("/build", router.Build)
+
+	r.Group(func(r chi.Router) {
+		r.Use(auth.IsAuthenticated)
+		r.Get("/inventory", router.Inventory)
+		r.Post("/build", router.Build)
+	})
 
 	return router
 }
@@ -61,7 +66,7 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("X-Trace-Id", span.SpanContext().TraceID().String())
 
-	auth := r.Header.Get("Authorization")
+	auth := authFromContext(ctx)
 
 	authUUID, err := uuid.Parse(auth)
 	if err != nil {
@@ -122,7 +127,7 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("X-Trace-Id", span.SpanContext().TraceID().String())
 
-	auth := r.Header.Get("Authorization")
+	auth := authFromContext(ctx)
 
 	decoder := json.NewDecoder(r.Body)
 	defer r.Body.Close()
@@ -269,4 +274,37 @@ func getBuildingAmount(r BuildRequest) int64 {
 	}
 
 	return amt
+}
+
+func E(w http.ResponseWriter, r *http.Request, err error) {
+	slog.Error("unauthorized", err, "url", r.URL.String())
+
+	status := http.StatusUnauthorized
+	res := ErrorResponse{
+		Status:     status,
+		StatusText: http.StatusText(status),
+		Error:      err,
+	}
+
+	render.Status(r, status)
+	render.JSON(w, r, res)
+}
+
+func authFromContext(ctx context.Context) string {
+	userProfile := ctx.Value(auth.ContextUserProfile)
+	if userProfile == nil {
+		return ""
+	}
+
+	var auth string
+
+	if p, ok := userProfile.(map[string]interface{}); ok {
+		if appMetadata, ok := p["app_metadata"].(map[string]interface{}); ok {
+			if authRaw, ok := appMetadata["external_id"].(string); ok {
+				auth = authRaw
+			}
+		}
+	}
+
+	return auth
 }

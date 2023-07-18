@@ -5,8 +5,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/api"
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
+	"github.com/0xa1-red/empires-of-avalon/http/api"
+	"github.com/0xa1-red/empires-of-avalon/http/auth"
 	intmw "github.com/0xa1-red/empires-of-avalon/http/middleware"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -26,6 +27,7 @@ func startServer(wg *sync.WaitGroup, addr string) {
 	s.Use(middleware.Timeout(60 * time.Second))
 
 	s.Mount("/", api.NewRouter(gamecluster.GetC()))
+	s.Mount("/auth", auth.NewRouter())
 
 	server = &http.Server{ // nolint:exhaustruct
 		Addr:              addr,

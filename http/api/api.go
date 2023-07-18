@@ -288,7 +288,6 @@ func E(w http.ResponseWriter, r *http.Request, err error) {
 
 	render.Status(r, status)
 	render.JSON(w, r, res)
-	return
 }
 
 func authFromContext(ctx context.Context) string {

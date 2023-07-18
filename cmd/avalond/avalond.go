@@ -54,25 +54,13 @@ func main() {
 
 	setupInstrumentation()
 
-	if err := auth.Init(); err != nil {
-		slog.Error("failed to set up authenticator", err)
-		exit(1)
-	}
+	initAuth()
 
-	if _, err := auth.GetToken(); err != nil {
-		slog.Error("failed to get management access token", err)
-		exit(1)
-	}
+	initToken()
 
-	if err := database.CreateConnection(); err != nil {
-		slog.Error("failed to connect to database", err)
-		exit(1)
-	}
+	initDatabase()
 
-	if _, err := nats.GetConnection(); err != nil {
-		slog.Error("failed to connect to NATS", err)
-		exit(1)
-	}
+	initTransport()
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
@@ -115,13 +103,8 @@ func main() {
 	gamecluster.SetC(c)
 	persistence.Create(c)
 
-	if err := persistence.Get().Restore("inventory", ""); err != nil {
-		slog.Error("failed to restore some inventory actors", err)
-	}
-
-	if err := persistence.Get().Restore("timer", ""); err != nil {
-		slog.Error("failed to restore some timer actors", err)
-	}
+	restoreSnapshots("inventory")
+	restoreSnapshots("timer")
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -167,5 +150,39 @@ func setupInstrumentation() {
 
 	if err := traces.RegisterTracesPipeline(); err != nil {
 		slog.Warn("failed to register traces pipeline", "error", err)
+	}
+}
+
+func initAuth() {
+	if err := auth.Init(); err != nil {
+		slog.Error("failed to set up authenticator", err)
+		exit(1)
+	}
+}
+
+func initToken() {
+	if _, err := auth.GetToken(); err != nil {
+		slog.Error("failed to get management access token", err)
+		exit(1)
+	}
+}
+
+func initDatabase() {
+	if err := database.CreateConnection(); err != nil {
+		slog.Error("failed to connect to database", err)
+		exit(1)
+	}
+}
+
+func initTransport() {
+	if _, err := nats.GetConnection(); err != nil {
+		slog.Error("failed to connect to NATS", err)
+		exit(1)
+	}
+}
+
+func restoreSnapshots(kind string) {
+	if err := persistence.Get().Restore(kind, ""); err != nil {
+		slog.Error("failed to restore snapshots", err, "kind", kind)
 	}
 }

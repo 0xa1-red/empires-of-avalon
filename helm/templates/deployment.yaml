@@ -23,6 +23,9 @@ spec:
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
             - containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: avalond-prod-auth0-config
           env:
             - name: AD_POSTGRES_PASSWD
               valueFrom:

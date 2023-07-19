@@ -38,6 +38,12 @@ spec:
             - name: config
               mountPath: "/etc/avalond"
               readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
       volumes:
         - name: config
           configMap:

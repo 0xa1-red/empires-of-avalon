@@ -4,3 +4,4 @@ metadata:
   name: avalond
   annotations:
     linkerd.io/inject: enabled
+    config.linkerd.io/opaque-ports: "4222,6222,8222,2223"

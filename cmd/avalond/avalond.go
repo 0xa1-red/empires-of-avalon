@@ -30,6 +30,7 @@ import (
 	"github.com/asynkron/protoactor-go/remote"
 	"github.com/spf13/viper"
 	clientv3 "go.etcd.io/etcd/client/v3"
+	"go.opentelemetry.io/otel"
 	"golang.org/x/exp/slog"
 	"google.golang.org/grpc"
 )
@@ -65,7 +66,6 @@ func main() {
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
 
-	system := actor.NewActorSystem()
 	etcdConf := clientv3.Config{ // nolint
 		Endpoints:   viper.GetStringSlice(config.ETCD_Endpoints),
 		DialTimeout: 5 * time.Second,
@@ -85,6 +85,8 @@ func main() {
 	}
 
 	lookup := disthash.New()
+	actorConfig := actor.Configure(actor.WithMetricProviders(otel.GetMeterProvider()))
+	system := actor.NewActorSystemWithConfig(actorConfig)
 
 	slog.Debug("configuring remote", slog.String("host", viper.GetString(config.Node_Host)), slog.String("port", viper.GetString(config.Node_Port)))
 

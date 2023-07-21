@@ -4,6 +4,8 @@ metadata:
   name: avalond
   labels:
     app: avalond
+    app.kubernetes.io/name: avalond
+    app.kubernetes.io/version: {{ .Values.image.tag | default .Chart.AppVersion }}
 spec:
   replicas: 1
   selector:
@@ -18,7 +20,7 @@ spec:
         prometheus.io/scrape: "true"
     spec:
       containers:
-        - name: avalon-backend
+        - name: avalond
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
@@ -38,7 +40,7 @@ spec:
                   name: avalond-prod-etcd
                   key: etcd-root-password
           volumeMounts:
-            - name: config
+            - name: avalond-config
               mountPath: "/etc/avalond"
               readOnly: true
           livenessProbe:
@@ -48,6 +50,6 @@ spec:
             initialDelaySeconds: 3
             periodSeconds: 5
       volumes:
-        - name: config
+        - name: avalond-config
           configMap:
             name: avalond-config-file

@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"io"
 	"os"
 
 	"github.com/0xa1-red/empires-of-avalon/config"
@@ -15,12 +16,32 @@ const (
 	levelError = "error"
 )
 
-func Setup() {
+var fileWriter *os.File
+
+func Setup() error {
 	opts := slog.HandlerOptions{ // nolint
 		Level: getLevel(),
 	}
-	handler := opts.NewTextHandler(os.Stdout)
+
+	writers := []io.Writer{os.Stdout}
+
+	if path := viper.GetString(config.Logging_Path); path != "" {
+		fp, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0755)
+		if err != nil {
+			return err
+		}
+
+		fileWriter = fp
+
+		writers = append(writers, fileWriter)
+	}
+
+	w := io.MultiWriter(writers...)
+
+	handler := opts.NewTextHandler(w)
 	slog.SetDefault(slog.New(handler))
+
+	return nil
 }
 
 func getLevel() slog.Leveler {
@@ -36,4 +57,12 @@ func getLevel() slog.Leveler {
 	}
 
 	return slog.LevelInfo
+}
+
+func Close() error {
+	if fileWriter != nil {
+		return fileWriter.Close()
+	}
+
+	return nil
 }

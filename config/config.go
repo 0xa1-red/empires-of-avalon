@@ -38,6 +38,7 @@ var configs = []struct {
 	{NATS_Password, "NATS_PASSWORD", ""},
 	// Logging
 	{Logging_Level, "LOGGING_LEVEL", "info"},
+	{Logging_Path, "LOGGING_PATH", "/var/log/avalond.log"},
 	// Persistence
 	{Persistence_Encoding, "PERSISTENCE_ENCODING", EncodingGob},
 	// Instrumentation

@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -86,7 +85,8 @@ func main() {
 
 	provider, err := etcd.NewWithConfig(viper.GetString(config.ETCD_Root), etcdConf)
 	if err != nil {
-		log.Fatalf("error creating etcd provider: %v", err)
+		slog.Error("failed to create etcd provider", err)
+		exit(1)
 	}
 
 	lookup := disthash.New()

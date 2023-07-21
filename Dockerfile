@@ -1,8 +1,8 @@
-FROM golang:buster AS build
+FROM golang:bullseye AS build
 COPY . /build
 COPY .git /build/.git
 WORKDIR /build
-RUN go build -o target/ ./cmd/avalond/...
+RUN make build
 
 FROM ubuntu:20.04
 RUN apt-get update && apt-get install -y ca-certificates

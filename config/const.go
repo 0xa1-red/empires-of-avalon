@@ -41,6 +41,7 @@ const (
 
 const (
 	Logging_Level = "logging.level"
+	Logging_Path  = "logging.path"
 )
 
 const (

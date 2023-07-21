@@ -4,7 +4,6 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -51,7 +50,12 @@ func main() {
 	}
 
 	config.Setup(configPath)
-	logging.Setup()
+
+	if err := logging.Setup(); err != nil {
+		slog.Error("error configuring logging facility", err)
+		os.Exit(1)
+	}
+	defer logging.Close()
 
 	setupInstrumentation()
 
@@ -81,7 +85,8 @@ func main() {
 
 	provider, err := etcd.NewWithConfig(viper.GetString(config.ETCD_Root), etcdConf)
 	if err != nil {
-		log.Fatalf("error creating etcd provider: %v", err)
+		slog.Error("failed to create etcd provider", err)
+		exit(1)
 	}
 
 	lookup := disthash.New()

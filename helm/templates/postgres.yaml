@@ -7,6 +7,9 @@ metadata:
   name: avalond-prod
 spec:
   postgresVersion: 15
+  databaseInitSQL:
+    key: init.sql
+    name: avalond-psql-init
   instances:
     - name: "avalond-prod-1"
       replicas: 1

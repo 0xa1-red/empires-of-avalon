@@ -71,3 +71,37 @@ func GetToken() (*Token, error) {
 
 	return accessToken, nil
 }
+
+func GetUserProfile(id string) (map[string]interface{}, error) {
+	managementURL := fmt.Sprintf("https://%s/api/v2/users/%s", viper.GetString(config.Authenticator_Domain), id)
+
+	client := http.DefaultClient
+	req, err := http.NewRequest(http.MethodGet, managementURL, nil)
+
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := GetToken()
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("%s %s", token.Kind, token.Token))
+
+	res, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	defer res.Body.Close()
+
+	profile := make(map[string]interface{})
+
+	decoder := json.NewDecoder(res.Body)
+	if err := decoder.Decode(&profile); err != nil {
+		return nil, err
+	}
+
+	return profile, nil
+}

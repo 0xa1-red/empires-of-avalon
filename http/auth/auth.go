@@ -1,9 +1,6 @@
 package auth
 
 import (
-	"encoding/json"
-	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 
@@ -95,7 +92,7 @@ func (rt *Router) Callback(w http.ResponseWriter, r *http.Request) {
 	store.Set("access_token", token.AccessToken)
 	store.Set("profile", profile)
 
-	userProfile, err := getUserProfile(profile["sub"].(string))
+	userProfile, err := auth.GetUserProfile(profile["sub"].(string))
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -158,41 +155,6 @@ func (rt *Router) Logout(w http.ResponseWriter, r *http.Request) {
 
 // 	// spew.Fdump(w, profile)
 // }
-
-func getUserProfile(id string) (map[string]interface{}, error) {
-	managementURL := fmt.Sprintf("https://%s/api/v2/users/%s", viper.GetString(config.Authenticator_Domain), id)
-
-	client := http.DefaultClient
-	req, err := http.NewRequest(http.MethodGet, managementURL, nil)
-
-	if err != nil {
-		return nil, err
-	}
-
-	token, err := auth.GetToken()
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Set("Authorization", fmt.Sprintf("%s %s", token.Kind, token.Token))
-	log.Println(req.Header.Get("Authorization"))
-
-	res, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-
-	defer res.Body.Close()
-
-	profile := make(map[string]interface{})
-
-	decoder := json.NewDecoder(res.Body)
-	if err := decoder.Decode(&profile); err != nil {
-		return nil, err
-	}
-
-	return profile, nil
-}
 
 // func (rt *Router) Test(w http.ResponseWriter, r *http.Request) {
 // 	prof := r.Context().Value(auth.ContextProfile)

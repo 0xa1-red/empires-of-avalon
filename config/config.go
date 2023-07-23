@@ -38,7 +38,7 @@ var configs = []struct {
 	{NATS_Password, "NATS_PASSWORD", ""},
 	// Logging
 	{Logging_Level, "LOGGING_LEVEL", "info"},
-	{Logging_Path, "LOGGING_PATH", "/var/log/avalond.log"},
+	{Logging_Path, "LOGGING_PATH", ""},
 	// Persistence
 	{Persistence_Encoding, "PERSISTENCE_ENCODING", EncodingGob},
 	// Instrumentation
@@ -49,6 +49,7 @@ var configs = []struct {
 	{Authenticator_Client_ID, "AUTHENTICATOR_CLIENT_ID", ""},
 	{Authenticator_Client_Secret, "AUTHENTICATOR_CLIENT_SECRET", ""},
 	{Authenticator_Callback, "AUTHENTICATOR_CALLBACK", "http://localhost:3000/auth/callback"},
+	{Authenticator_Audience, "AUTHENTICATOR_AUDIENCE", ""},
 }
 
 func Setup(path string) {

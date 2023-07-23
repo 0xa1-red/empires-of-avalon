@@ -61,4 +61,5 @@ const (
 	Authenticator_Client_ID     = "authenticator.client_id"
 	Authenticator_Client_Secret = "authenticator.client_secret"
 	Authenticator_Callback      = "authenticator.callback"
+	Authenticator_Audience      = "authenticator.audience"
 )

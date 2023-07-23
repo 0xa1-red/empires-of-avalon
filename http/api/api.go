@@ -12,7 +12,10 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/pkg/auth"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
+	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
+	"github.com/auth0/go-jwt-middleware/v2/validator"
 	"github.com/go-chi/chi"
+	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -36,10 +39,19 @@ func NewRouter(c *cluster.Cluster) *Router {
 		cluster: c,
 	}
 
+	r.Use(cors.Handler(cors.Options{ // nolint:exhaustruct
+		AllowedOrigins:   []string{"http://localhost:5173"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowCredentials: true,
+		AllowedHeaders:   []string{"Authorization"},
+		MaxAge:           300,
+		Debug:            true,
+	}))
+
 	r.Get("/", router.Index)
 
 	r.Group(func(r chi.Router) {
-		r.Use(auth.IsAuthenticated)
+		r.Use(auth.EnsureValidToken())
 		r.Get("/inventory", router.Inventory)
 		r.Post("/build", router.Build)
 	})
@@ -66,7 +78,7 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("X-Trace-Id", span.SpanContext().TraceID().String())
 
-	auth := authFromContext(ctx)
+	auth := authFromContext(w, r, ctx)
 
 	authUUID, err := uuid.Parse(auth)
 	if err != nil {
@@ -127,7 +139,7 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("X-Trace-Id", span.SpanContext().TraceID().String())
 
-	auth := authFromContext(ctx)
+	auth := authFromContext(w, r, ctx)
 
 	decoder := json.NewDecoder(r.Body)
 	defer r.Body.Close()
@@ -276,10 +288,9 @@ func getBuildingAmount(r BuildRequest) int64 {
 	return amt
 }
 
-func E(w http.ResponseWriter, r *http.Request, err error) {
+func E(w http.ResponseWriter, r *http.Request, status int, err error) {
 	slog.Error("unauthorized", err, "url", r.URL.String())
 
-	status := http.StatusUnauthorized
 	res := ErrorResponse{
 		Status:     status,
 		StatusText: http.StatusText(status),
@@ -290,21 +301,38 @@ func E(w http.ResponseWriter, r *http.Request, err error) {
 	render.JSON(w, r, res)
 }
 
-func authFromContext(ctx context.Context) string {
-	userProfile := ctx.Value(auth.ContextUserProfile)
-	if userProfile == nil {
+func authFromContext(w http.ResponseWriter, r *http.Request, ctx context.Context) string {
+	claims := ctx.Value(jwtmiddleware.ContextKey{})
+	if claims == nil {
+		E(w, r, http.StatusInternalServerError, fmt.Errorf("claims not found"))
 		return ""
 	}
 
-	var auth string
+	validatedClaims, ok := claims.(*validator.ValidatedClaims)
+	if !ok {
+		E(w, r, http.StatusInternalServerError, fmt.Errorf("failed to validate claims 1"))
+		return ""
+	}
 
-	if p, ok := userProfile.(map[string]interface{}); ok {
-		if appMetadata, ok := p["app_metadata"].(map[string]interface{}); ok {
-			if authRaw, ok := appMetadata["external_id"].(string); ok {
-				auth = authRaw
-			}
+	customClaims, ok := validatedClaims.CustomClaims.(*auth.CustomClaims)
+	if !ok {
+		E(w, r, http.StatusInternalServerError, fmt.Errorf("failed to validate claims 2"))
+		return ""
+	}
+
+	id := customClaims.Subject
+
+	profile, err := auth.GetUserProfile(id)
+	if err != nil {
+		E(w, r, http.StatusInternalServerError, err)
+		return ""
+	}
+
+	if metadata, ok := profile["app_metadata"].(map[string]interface{}); ok {
+		if eid, ok := metadata["external_id"].(string); ok {
+			return eid
 		}
 	}
 
-	return auth
+	return ""
 }

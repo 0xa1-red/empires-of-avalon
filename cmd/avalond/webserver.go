@@ -8,7 +8,6 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/gamecluster"
 	inthttp "github.com/0xa1-red/empires-of-avalon/http"
 	"github.com/0xa1-red/empires-of-avalon/http/api"
-	"github.com/0xa1-red/empires-of-avalon/http/auth"
 	intmw "github.com/0xa1-red/empires-of-avalon/http/middleware"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
@@ -27,8 +26,7 @@ func startServer(wg *sync.WaitGroup, addr string) {
 	s.Use(middleware.AllowContentType("application/json"))
 	s.Use(middleware.Timeout(60 * time.Second))
 
-	s.Mount("/", api.NewRouter(gamecluster.GetC()))
-	s.Mount("/auth", auth.NewRouter())
+	s.Mount("/api", api.NewRouter(gamecluster.GetC()))
 
 	s.Get("/healthz", inthttp.Healthcheck)
 

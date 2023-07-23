@@ -27,7 +27,7 @@ func startServer(wg *sync.WaitGroup, addr string) {
 	s.Use(middleware.AllowContentType("application/json"))
 	s.Use(middleware.Timeout(60 * time.Second))
 
-	s.Mount("/", api.NewRouter(gamecluster.GetC()))
+	s.Mount("/api", api.NewRouter(gamecluster.GetC()))
 	s.Mount("/auth", auth.NewRouter())
 
 	s.Get("/healthz", inthttp.Healthcheck)

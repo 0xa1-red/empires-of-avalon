@@ -73,7 +73,10 @@ func GetToken() (*Token, error) {
 }
 
 func GetUserProfile(id string) (map[string]interface{}, error) {
-	managementURL := fmt.Sprintf("https://%s/api/v2/users/%s", viper.GetString(config.Authenticator_Domain), id)
+	managementURL := fmt.Sprintf("https://%s/api/v2/users/%s",
+		viper.GetString(config.Authenticator_Domain),
+		id,
+	)
 
 	client := http.DefaultClient
 	req, err := http.NewRequest(http.MethodGet, managementURL, nil)

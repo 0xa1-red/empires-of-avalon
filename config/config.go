@@ -48,7 +48,6 @@ var configs = []struct {
 	{Authenticator_Domain, "AUTHENTICATOR_DOMAIN", ""},
 	{Authenticator_Client_ID, "AUTHENTICATOR_CLIENT_ID", ""},
 	{Authenticator_Client_Secret, "AUTHENTICATOR_CLIENT_SECRET", ""},
-	{Authenticator_Callback, "AUTHENTICATOR_CALLBACK", "http://localhost:3000/auth/callback"},
 	{Authenticator_Audience, "AUTHENTICATOR_AUDIENCE", ""},
 }
 

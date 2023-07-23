@@ -59,8 +59,6 @@ func main() {
 
 	setupInstrumentation()
 
-	initAuth()
-
 	initToken()
 
 	initDatabase()
@@ -157,13 +155,6 @@ func setupInstrumentation() {
 
 	if err := traces.RegisterTracesPipeline(); err != nil {
 		slog.Warn("failed to register traces pipeline", "error", err)
-	}
-}
-
-func initAuth() {
-	if err := auth.Init(); err != nil {
-		slog.Error("failed to set up authenticator", err)
-		exit(1)
 	}
 }
 

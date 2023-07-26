@@ -88,17 +88,9 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	span.SetAttributes(attribute.String("user_id", authUUID.String()))
-	slog.Info("getting inventory grain client", "id", blueprints.GetInventoryID(authUUID).String())
 
-	inventory := protobuf.GetInventoryGrainClient(rt.cluster, blueprints.GetInventoryID(authUUID).String())
+	res, err := game.Describe(ctx, authUUID)
 
-	carrier := propagation.MapCarrier{}
-	otel.GetTextMapPropagator().Inject(ctx, &carrier)
-
-	res, err := inventory.Describe(&protobuf.DescribeInventoryRequest{
-		TraceID:   carrier.Get("traceparent"),
-		Timestamp: timestamppb.Now(),
-	})
 	if err != nil {
 		span.RecordError(err)
 		slog.Error("failed to get inventory", err, "auth", auth, "url", r.URL.String())

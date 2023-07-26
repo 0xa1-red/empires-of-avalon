@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 
-	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/http/middleware"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/pkg/auth"
+	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
 	jwtmiddleware "github.com/auth0/go-jwt-middleware/v2"
@@ -45,7 +47,6 @@ func NewRouter(c *cluster.Cluster) *Router {
 		AllowCredentials: true,
 		AllowedHeaders:   []string{"Authorization"},
 		MaxAge:           300,
-		Debug:            true,
 	}))
 
 	r.Get("/", router.Index)
@@ -99,9 +100,9 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	span.SetAttributes(attribute.String("user_id", authUUID.String()))
-	slog.Info("getting inventory grain client", "id", common.GetInventoryID(authUUID).String())
+	slog.Info("getting inventory grain client", "id", blueprints.GetInventoryID(authUUID).String())
 
-	inventory := protobuf.GetInventoryGrainClient(rt.cluster, common.GetInventoryID(authUUID).String())
+	inventory := protobuf.GetInventoryGrainClient(rt.cluster, blueprints.GetInventoryID(authUUID).String())
 
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, &carrier)
@@ -141,15 +142,10 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 
 	auth := authFromContext(w, r, ctx)
 
-	decoder := json.NewDecoder(r.Body)
-	defer r.Body.Close()
-
-	var buildRequest BuildRequest
-	if err := decoder.Decode(&buildRequest); err != nil {
+	authUUID, err := uuid.Parse(auth)
+	if err != nil {
 		span.RecordError(err)
-		slog.Error("failed to parse request", err,
-			"auth", auth,
-		)
+		slog.Error("failed to parse authorization header", err, "auth", auth, "url", r.URL.String())
 
 		status := http.StatusBadRequest
 		res := ErrorResponse{
@@ -164,14 +160,28 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	decoder := json.NewDecoder(r.Body)
+	defer r.Body.Close()
+
+	var buildRequest BuildRequest
+	if err := decoder.Decode(&buildRequest); err != nil {
+		E(w, r, http.StatusBadRequest, err)
+
+		return
+	}
+
 	building := buildRequest.Building
 
-	span.SetAttributes(attribute.String("building", building))
+	span.SetAttributes(attribute.String("building", building), attribute.String("user_id", auth))
 
 	amt := getBuildingAmount(buildRequest)
 
-	b, ok := common.Buildings[common.BuildingName(building)]
-	if !ok {
+	buildingID := blueprints.GetBuildingID(building)
+
+	log.Println(buildingID)
+
+	blueprint, err := registry.GetBuilding(buildingID)
+	if err != nil {
 		err := fmt.Errorf("invalid building type %s", building)
 		span.RecordError(err)
 		slog.Error("failed to start building", err,
@@ -192,33 +202,15 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	authUUID, err := uuid.Parse(auth)
-	if err != nil {
-		span.RecordError(err)
-		slog.Error("failed to parse authorization header", err, "auth", auth, "url", r.URL.String())
-
-		status := http.StatusBadRequest
-		res := ErrorResponse{
-			Status:     status,
-			StatusText: http.StatusText(status),
-			Error:      err,
-		}
-
-		render.Status(r, status)
-		render.JSON(w, r, res)
-
-		return
-	}
-
 	span.SetAttributes(attribute.String("user_id", authUUID.String()))
-	inventory := protobuf.GetInventoryGrainClient(rt.cluster, common.GetInventoryID(authUUID).String())
+	inventory := protobuf.GetInventoryGrainClient(rt.cluster, blueprints.GetInventoryID(authUUID).String())
 
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, &carrier)
 
 	res, err := inventory.Start(&protobuf.StartRequest{
 		TraceID:   carrier.Get("traceparent"),
-		Name:      string(b.Name),
+		Name:      blueprint.Name.String(),
 		Amount:    amt,
 		Timestamp: timestamppb.Now(),
 	})
@@ -228,7 +220,7 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to start building", err,
 			"auth", auth,
 			"url", r.URL.String(),
-			"building", b.Name,
+			"building", blueprint.Name,
 		)
 
 		status := http.StatusInternalServerError
@@ -249,7 +241,7 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to start building", fmt.Errorf("%s", res.Error),
 			"auth", auth,
 			"url", r.URL.String(),
-			"building", b.Name,
+			"building", blueprint.Name,
 		)
 
 		status := http.StatusInternalServerError

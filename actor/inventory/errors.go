@@ -3,11 +3,11 @@ package inventory
 import (
 	"fmt"
 
-	"github.com/0xa1-red/empires-of-avalon/common"
+	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
 )
 
 type InsufficientResourceError struct {
-	Resource common.ResourceName
+	Resource blueprints.ResourceName
 }
 
 func (e InsufficientResourceError) Error() string {
@@ -15,7 +15,7 @@ func (e InsufficientResourceError) Error() string {
 }
 
 type InvalidResourceError struct {
-	Resource common.ResourceName
+	Resource blueprints.ResourceName
 }
 
 func (e InvalidResourceError) Error() string {

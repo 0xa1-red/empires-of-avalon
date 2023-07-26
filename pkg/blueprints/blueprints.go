@@ -2,6 +2,7 @@ package blueprints
 
 const (
 	KindBuilding string = "building"
+	KindResource string = "resource"
 )
 
 type Blueprint interface {

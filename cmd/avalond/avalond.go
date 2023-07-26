@@ -19,6 +19,8 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/logging"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/pkg/auth"
+	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"github.com/0xa1-red/empires-of-avalon/version"
@@ -35,13 +37,15 @@ import (
 )
 
 var (
-	configPath   string
-	printVersion bool
+	configPath    string
+	blueprintPath string
+	printVersion  bool
 )
 
 func main() {
 	flag.BoolVar(&printVersion, "version", false, "print version information")
 	flag.StringVar(&configPath, "config-file", "", "path to config file")
+	flag.StringVar(&blueprintPath, "blueprints", "", "path to blueprint directory")
 	flag.Parse()
 
 	if printVersion {
@@ -64,6 +68,8 @@ func main() {
 	initDatabase()
 
 	initTransport()
+
+	initRegistry(blueprintPath)
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
@@ -183,4 +189,22 @@ func restoreSnapshots(kind string) {
 	if err := persistence.Get().Restore(kind, ""); err != nil {
 		slog.Error("failed to restore snapshots", err, "kind", kind)
 	}
+}
+
+func initRegistry(path string) {
+	buildingFilePath := fmt.Sprintf("%s/buildings.yaml", path)
+	if err := registry.ReadYaml[*blueprints.Building](buildingFilePath); err != nil {
+		slog.Error("failed to read in building blueprints", err)
+		exit(1)
+	}
+
+	slog.Info("registered building blueprints", "path", buildingFilePath)
+
+	resourceFilePath := fmt.Sprintf("%s/resources.yaml", path)
+	if err := registry.ReadYaml[*blueprints.Resource](resourceFilePath); err != nil {
+		slog.Error("failed to read in resource blueprints", err)
+		exit(1)
+	}
+
+	slog.Info("registered resource blueprints", "path", resourceFilePath)
 }

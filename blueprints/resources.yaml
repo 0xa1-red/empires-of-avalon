@@ -1,0 +1,28 @@
+---
+kind: Resource
+name: Population
+starting_cap: 6
+starting_amount: 6
+cap_formula: |
+  return buildings.house*6
+---
+kind: Resource
+name: Wood
+starting_cap: 100
+starting_amount: 100
+cap_formula: |
+  return buildings.warehouse*100
+---
+kind: Resource
+name: Stone
+starting_cap: 100
+starting_amount: 0
+cap_formula: |
+  return buildings.warehouse*100
+---
+kind: Resource
+name: Planks
+starting_cap: 100
+starting_amount: 0
+cap_formula: |
+  return buildings.warehouse*100

@@ -5,7 +5,6 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/blueprints/registry"
-	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/logging"
 )
@@ -19,28 +18,13 @@ func main() {
 	flag.Parse()
 
 	config.Setup(configPath)
-	logging.Setup()
+	logging.Setup() // nolint
 
-	buildingName := "house"
-	id := common.GetBuildingID(buildingName)
-	i := &blueprints.Building{
-		ID:   id,
-		Name: buildingName,
-		Cost: map[string]int64{
-			"wood": 100,
-		},
-		Generates: map[string]blueprints.Generator{
-			"pops": {
-				Name:       "pops",
-				Amount:     1,
-				TickLength: "1s",
-			},
-		},
-		BuildTime: "10s",
-	}
-
-	if err := registry.Push("building", i, true); err != nil {
+	if err := registry.ReadYaml[*blueprints.Resource]("./resources.yaml"); err != nil {
 		panic(err)
 	}
 
+	if err := registry.ReadYaml[*blueprints.Building]("./buildings.yaml"); err != nil {
+		panic(err)
+	}
 }

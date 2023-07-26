@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/common"
+	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -18,7 +18,9 @@ func TestBuildingCallback(t *testing.T) {
 
 	g.updateLimits()
 
-	g.buildings[common.House].Queue = []Building{
+	id := blueprints.GetBuildingID(blueprints.House.String())
+
+	g.buildings[id].Queue = []Building{
 		{
 			State:          "inactive",
 			WorkersMaximum: 2,
@@ -31,7 +33,7 @@ func TestBuildingCallback(t *testing.T) {
 		Timestamp: timestamppb.Now(),
 		Data: &structpb.Struct{
 			Fields: map[string]*structpb.Value{
-				KeyBuilding:          structpb.NewStringValue(string(common.House)),
+				KeyBuilding:          structpb.NewStringValue(string(blueprints.House)),
 				KeyDisableGenerators: structpb.NewBoolValue(true),
 			},
 		},
@@ -39,11 +41,11 @@ func TestBuildingCallback(t *testing.T) {
 
 	g.buildingCallback(&payload)
 
-	if expected, actual := 1, len(g.buildings[common.House].Completed); expected != actual {
+	if expected, actual := 1, len(g.buildings[id].Completed); expected != actual {
 		t.Fatalf("FAIL: expected amount to be %d, got %d", expected, actual)
 	}
 
-	if expected, actual := 0, len(g.buildings[common.House].Queue); expected != actual {
+	if expected, actual := 0, len(g.buildings[id].Queue); expected != actual {
 		t.Fatalf("FAIL: expected queue to be %d, got %d", expected, actual)
 	}
 }
@@ -56,30 +58,30 @@ func TestReserveRequest(t *testing.T) {
 
 	tests := []struct {
 		label          string
-		resource       common.ResourceName
+		resource       blueprints.ResourceName
 		amount         float64
 		expectedStatus protobuf.Status
 		expectedError  error
 	}{
 		{
 			label:          "success",
-			resource:       common.Wood,
+			resource:       blueprints.Wood,
 			amount:         100,
 			expectedStatus: protobuf.Status_OK,
 		},
 		{
 			label:          "insufficient resource error",
-			resource:       common.Wood,
+			resource:       blueprints.Wood,
 			amount:         500,
 			expectedStatus: protobuf.Status_Error,
-			expectedError:  InsufficientResourceError{Resource: common.Wood},
+			expectedError:  InsufficientResourceError{Resource: blueprints.Wood},
 		},
 		{
 			label:          "invalid resource error",
-			resource:       common.ResourceName("bogus"),
+			resource:       blueprints.ResourceName("bogus"),
 			amount:         1,
 			expectedStatus: protobuf.Status_Error,
-			expectedError:  InvalidResourceError{Resource: common.ResourceName("bogus")},
+			expectedError:  InvalidResourceError{Resource: blueprints.ResourceName("bogus")},
 		},
 	}
 

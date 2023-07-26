@@ -6,11 +6,13 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/persistence/encoding"
+	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
+	"github.com/google/uuid"
 	"github.com/spf13/viper"
 	"golang.org/x/exp/slog"
 )
@@ -44,14 +46,14 @@ func (g *Grain) Decode(b []byte) error {
 		return fmt.Errorf("Unimplemented")
 	}
 
-	g.buildings = m["buildings"].(map[common.BuildingName]*BuildingRegister)
-	g.resources = m["resources"].(map[common.ResourceName]*ResourceRegister)
+	g.buildings = m["buildings"].(map[uuid.UUID]*BuildingRegister)
+	g.resources = m["resources"].(map[blueprints.ResourceName]*ResourceRegister)
 
 	for _, r := range g.resources {
 		r.mx = &sync.Mutex{}
 	}
 
-	for _, b := range g.buildings {
+	for id, b := range g.buildings {
 		b.mx = &sync.Mutex{}
 		if len(b.Completed) == 0 {
 			continue
@@ -59,13 +61,14 @@ func (g *Grain) Decode(b []byte) error {
 
 		slog.Debug("building decode", "name", b.Name, "amount", len(b.Completed))
 
-		for _, gen := range common.Buildings[b.Name].Generators {
+		buildings := registry.GetBuildings()
+		for _, gen := range buildings[id].Generates {
 			if err := g.startGenerator(gen); err != nil {
 				slog.Error("failed to start generator", err, "name", gen.Name)
 			}
 		}
 
-		for _, tf := range common.Buildings[b.Name].Transformers {
+		for _, tf := range buildings[id].Transforms {
 			if err := g.startTransformer(tf); err != nil {
 				slog.Error("failed to start transformer", err, "name", tf.Name)
 			}
@@ -100,8 +103,8 @@ func (g *Grain) Restore(req *protobuf.RestoreRequest, ctx cluster.GrainContext) 
 }
 
 func init() {
-	buildingRegisters := make(map[common.BuildingName]*BuildingRegister)
-	resourceRegisters := make(map[common.ResourceName]*ResourceRegister)
+	buildingRegisters := make(map[blueprints.BuildingName]*BuildingRegister)
+	resourceRegisters := make(map[blueprints.ResourceName]*ResourceRegister)
 
 	gob.Register(buildingRegisters)
 	gob.Register(resourceRegisters)

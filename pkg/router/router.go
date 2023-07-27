@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/gamecluster"
 	intmw "github.com/0xa1-red/empires-of-avalon/pkg/middleware"
 	"github.com/0xa1-red/empires-of-avalon/pkg/model"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/auth"
@@ -25,7 +24,6 @@ func New() *chi.Mux {
 	s.Use(middleware.AllowContentType("application/json"))
 	s.Use(middleware.Timeout(60 * time.Second))
 
-	s.Mount("/api", NewGameRouter(gamecluster.GetC()))
 
 	s.Get("/healthz", Healthcheck)
 

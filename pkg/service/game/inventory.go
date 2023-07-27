@@ -3,7 +3,7 @@ package game
 import (
 	"context"
 
-	"github.com/0xa1-red/empires-of-avalon/gamecluster"
+	gamecluster "github.com/0xa1-red/empires-of-avalon/pkg/cluster"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/google/uuid"

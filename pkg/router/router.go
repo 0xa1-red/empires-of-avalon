@@ -24,6 +24,7 @@ func New() *chi.Mux {
 	s.Use(middleware.AllowContentType("application/json"))
 	s.Use(middleware.Timeout(60 * time.Second))
 
+	s.Mount("/api", GameRouter())
 
 	s.Get("/healthz", Healthcheck)
 

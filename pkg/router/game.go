@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
+	gamecluster "github.com/0xa1-red/empires-of-avalon/pkg/cluster"
 	"github.com/0xa1-red/empires-of-avalon/pkg/middleware"
 	"github.com/0xa1-red/empires-of-avalon/pkg/model"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/auth"
@@ -14,7 +15,6 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
-	"github.com/asynkron/protoactor-go/cluster"
 	"github.com/go-chi/chi"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/render"
@@ -28,16 +28,13 @@ import (
 
 type Router struct {
 	chi.Router
-
-	cluster *cluster.Cluster
 }
 
-func NewGameRouter(c *cluster.Cluster) *Router {
+func GameRouter() *Router {
 	r := chi.NewRouter()
 
 	router := &Router{
-		Router:  r,
-		cluster: c,
+		Router: r,
 	}
 
 	r.Use(cors.Handler(cors.Options{ // nolint:exhaustruct
@@ -158,7 +155,7 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 	}
 
 	span.SetAttributes(attribute.String("user_id", authUUID.String()))
-	inventory := protobuf.GetInventoryGrainClient(rt.cluster, blueprints.GetInventoryID(authUUID).String())
+	inventory := protobuf.GetInventoryGrainClient(gamecluster.GetC(), blueprints.GetInventoryID(authUUID).String())
 
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, &carrier)

@@ -1,17 +1,35 @@
 package inventory
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func setupRegistry() error {
+	if err := registry.ReadYaml[*blueprints.Building]("./testdata/buildings.yaml"); err != nil {
+		return fmt.Errorf("Fail: failed to read building data: %w", err)
+	}
+
+	if err := registry.ReadYaml[*blueprints.Resource]("./testdata/resources.yaml"); err != nil {
+		return fmt.Errorf("Fail: failed to read resource data: %w", err)
+	}
+
+	return nil
+}
+
 func TestBuildingCallback(t *testing.T) {
 	g := &Grain{}
+
+	if err := setupRegistry(); err != nil {
+		t.Fatalf("Fail: %v", err)
+	}
 
 	g.buildings = getStartingBuildings()
 	g.resources = getStartingResources()
@@ -52,6 +70,10 @@ func TestBuildingCallback(t *testing.T) {
 
 func TestReserveRequest(t *testing.T) {
 	grain := &Grain{}
+
+	if err := setupRegistry(); err != nil {
+		t.Fatalf("Fail: %v", err)
+	}
 
 	grain.buildings = getStartingBuildings()
 	grain.resources = getStartingResources()

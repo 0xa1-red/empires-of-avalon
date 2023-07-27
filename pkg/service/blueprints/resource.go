@@ -12,10 +12,10 @@ func (r ResourceName) String() string {
 }
 
 const (
-	Population ResourceName = "population"
-	Wood       ResourceName = "wood"
-	Stone      ResourceName = "stone"
-	Planks     ResourceName = "planks"
+	Population ResourceName = "Population"
+	Wood       ResourceName = "Wood"
+	Stone      ResourceName = "Stone"
+	Planks     ResourceName = "Planks"
 )
 
 type Resource struct {

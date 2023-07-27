@@ -7,14 +7,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/blueprints"
-	"github.com/0xa1-red/empires-of-avalon/common"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	intnats "github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"github.com/asynkron/protoactor-go/cluster"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"go.opentelemetry.io/otel"
@@ -58,7 +57,7 @@ type Building struct {
 type BuildingRegister struct {
 	mx *sync.Mutex
 
-	Name      common.BuildingName
+	Name      blueprints.BuildingName
 	Completed []Building
 	Queue     []Building
 }
@@ -66,8 +65,8 @@ type BuildingRegister struct {
 type Grain struct {
 	ctx cluster.GrainContext
 
-	buildings     map[common.BuildingName]*BuildingRegister
-	resources     map[common.ResourceName]*ResourceRegister
+	buildings     map[uuid.UUID]*BuildingRegister
+	resources     map[blueprints.ResourceName]*ResourceRegister
 	subscriptions map[string]*nats.Subscription
 	callbacks     map[string]*Callback
 }
@@ -147,8 +146,8 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	sctx, span := traces.Start(pctx, "actor/inventory/start")
 	defer span.End()
 
-	b, ok := common.Buildings[common.BuildingName(req.Name)]
-	if !ok {
+	blueprint, err := registry.GetBuilding(blueprints.GetBuildingID(req.Name))
+	if err != nil {
 		return &protobuf.StartResponse{
 			Status:    protobuf.Status_Error,
 			Error:     fmt.Sprintf("Invalid building name: %s", req.Name),
@@ -156,10 +155,10 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		}, nil
 	}
 
-	if _, ok := g.buildings[b.Name]; !ok {
-		g.buildings[b.Name] = &BuildingRegister{
+	if _, ok := g.buildings[blueprint.ID]; !ok {
+		g.buildings[blueprint.ID] = &BuildingRegister{
 			mx:        &sync.Mutex{},
-			Name:      b.Name,
+			Name:      blueprint.Name,
 			Completed: make([]Building, 0),
 			Queue:     make([]Building, 0),
 		}
@@ -180,7 +179,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	insufficient := make([]string, 0)
 
-	for _, cost := range b.Cost {
+	for _, cost := range blueprint.Cost {
 		if g.resources[cost.Resource].Amount < cost.Amount {
 			insufficient = append(insufficient, string(cost.Resource))
 		}
@@ -195,7 +194,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	}
 
 	buildingID := uuid.New()
-	slog.Info("requested building", "name", string(b.Name), "id", buildingID.String())
+	slog.Info("requested building", "name", string(blueprint.Name), "id", buildingID.String())
 
 	otel.GetTextMapPropagator().Inject(sctx, &carrier)
 
@@ -205,11 +204,11 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		Kind:        protobuf.TimerKind_Building,
 		Reply:       g.callbacks[CallbackBuildings].Subject,
 		InventoryID: g.ctx.Identity(),
-		Duration:    b.BuildTime,
+		Duration:    blueprint.BuildTime,
 		Data: &structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"id":       structpb.NewStringValue(buildingID.String()),
-				"building": structpb.NewStringValue(string(b.Name)),
+				"building": structpb.NewStringValue(string(blueprint.Name)),
 				"amount":   structpb.NewNumberValue(1),
 			},
 		},
@@ -231,7 +230,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	)
 
 	reserved := make([]ReservedResource, 0)
-	for _, resource := range b.Cost {
+	for _, resource := range blueprint.Cost {
 		reserved = append(reserved, ReservedResource{
 			Name:      string(resource.Resource),
 			Amount:    resource.Amount,
@@ -242,13 +241,13 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	build := Building{
 		ID:                buildingID,
 		State:             StateQueued,
-		WorkersMaximum:    2,
+		WorkersMaximum:    blueprint.WorkersMaximum,
 		WorkersCurrent:    0,
 		Completion:        res.Deadline.AsTime(),
 		ReservedResources: reserved,
 	}
 
-	g.buildings[b.Name].Queue = append(g.buildings[b.Name].Queue, build)
+	g.buildings[blueprint.ID].Queue = append(g.buildings[blueprint.ID].Queue, build)
 
 	return &protobuf.StartResponse{
 		Status:    protobuf.Status_OK,
@@ -268,7 +267,7 @@ func (g *Grain) Describe(req *protobuf.DescribeInventoryRequest, ctx cluster.Gra
 	buildingValues := make(map[string]*structpb.Value)
 	resourceValues := make(map[string]*structpb.Value)
 
-	for building, meta := range g.buildings {
+	for _, meta := range g.buildings {
 		completedList := make([]*structpb.Value, 0)
 
 		for _, state := range meta.Completed {
@@ -314,7 +313,7 @@ func (g *Grain) Describe(req *protobuf.DescribeInventoryRequest, ctx cluster.Gra
 			Values: queuedList,
 		})
 
-		buildingValues[string(building)] = structpb.NewStructValue(&structpb.Struct{
+		buildingValues[meta.Name.String()] = structpb.NewStructValue(&structpb.Struct{
 			Fields: map[string]*structpb.Value{
 				"completed": completed,
 				"queued":    queued,
@@ -349,14 +348,29 @@ func (g *Grain) Describe(req *protobuf.DescribeInventoryRequest, ctx cluster.Gra
 	}, nil
 }
 
-func getStartingBuildings() map[common.BuildingName]*BuildingRegister {
-	registers := make(map[common.BuildingName]*BuildingRegister)
+func getStartingBuildings() map[uuid.UUID]*BuildingRegister {
+	registers := make(map[uuid.UUID]*BuildingRegister)
 
-	for name := range common.Buildings {
-		registers[name] = &BuildingRegister{
+	now := time.Now()
+
+	for _, blueprint := range registry.GetBuildings() {
+		completed := make([]Building, 0)
+
+		for i := 0; i < blueprint.InitialAmount; i++ {
+			completed = append(completed, Building{
+				ID:                uuid.New(),
+				State:             StateActive,
+				WorkersMaximum:    blueprint.WorkersMaximum,
+				WorkersCurrent:    0,
+				Completion:        now,
+				ReservedResources: make([]ReservedResource, 0),
+			})
+		}
+
+		registers[blueprint.ID] = &BuildingRegister{
 			mx:        &sync.Mutex{},
-			Name:      name,
-			Completed: make([]Building, 0),
+			Name:      blueprint.Name,
+			Completed: completed,
 			Queue:     make([]Building, 0),
 		}
 	}
@@ -459,25 +473,25 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 
 	payload := t.Data.AsMap()
 	buildingName := payload[KeyBuilding].(string)
-	building, ok := common.Buildings[common.BuildingName(buildingName)]
 
-	if !ok {
+	building, err := registry.GetBuilding(blueprints.GetBuildingID(buildingName))
+	if err != nil {
 		return
 	}
 
-	g.buildings[building.Name].mx.Lock()
-	defer g.buildings[building.Name].mx.Unlock()
+	g.buildings[building.ID].mx.Lock()
+	defer g.buildings[building.ID].mx.Unlock()
 
 	slog.Debug("finished building", "building", building.Name)
-	b := g.buildings[building.Name].Queue[0]
+	b := g.buildings[building.ID].Queue[0]
 	b.State = StateActive
 	b.Completion = time.Now()
-	g.buildings[building.Name].Completed = append(g.buildings[building.Name].Completed, b)
+	g.buildings[building.ID].Completed = append(g.buildings[building.ID].Completed, b)
 
-	if len(g.buildings[building.Name].Queue) == 1 {
-		g.buildings[building.Name].Queue = make([]Building, 0)
+	if len(g.buildings[building.ID].Queue) == 1 {
+		g.buildings[building.ID].Queue = make([]Building, 0)
 	} else {
-		g.buildings[building.Name].Queue = g.buildings[building.Name].Queue[1:]
+		g.buildings[building.ID].Queue = g.buildings[building.ID].Queue[1:]
 	}
 
 	for _, cost := range building.Cost {
@@ -501,9 +515,9 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 func (g *Grain) generatorCallback(t *protobuf.TimerFired) {
 	payload := t.Data.AsMap()
 	resourceName := payload[KeyResource].(string)
-	resource, ok := common.Resources[common.ResourceName(resourceName)]
 
-	if !ok {
+	resource, err := registry.GetResource(resourceName)
+	if err != nil {
 		return
 	}
 
@@ -515,40 +529,39 @@ func (g *Grain) generatorCallback(t *protobuf.TimerFired) {
 func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
 	payload := t.Data
 
-	spew.Dump(t.Data)
-
 	reserveCache := map[string]int{}
 	addCache := map[string]int{}
 
 	for _, result := range payload.Fields["result"].GetListValue().Values {
 		r := result.GetStructValue()
 		resource := r.Fields["resource"].GetStringValue()
-		g.resources[common.ResourceName(resource)].mx.Lock()
+		g.resources[blueprints.ResourceName(resource)].mx.Lock()
 		added := int(r.Fields["amount"].GetNumberValue())
 
-		g.resources[common.ResourceName(resource)].Amount += added
+		g.resources[blueprints.ResourceName(resource)].Amount += added
+
 		addCache[resource] = added
-		g.resources[common.ResourceName(resource)].mx.Unlock()
+		g.resources[blueprints.ResourceName(resource)].mx.Unlock()
 	}
 
 	for _, cost := range payload.Fields["cost"].GetListValue().Values {
 		r := cost.GetStructValue()
 
 		resource := r.Fields["resource"].GetStringValue()
-		g.resources[common.ResourceName(resource)].mx.Lock()
+		g.resources[blueprints.ResourceName(resource)].mx.Lock()
 		reserved := int(r.Fields["amount"].GetNumberValue())
 
-		if !r.Fields["temporary"].GetBoolValue() {
-			g.resources[common.ResourceName(resource)].Amount += reserved
+		if r.Fields["temporary"].GetBoolValue() {
+			g.resources[blueprints.ResourceName(resource)].Amount += reserved
+			addCache[resource] += reserved
 		}
 
-		g.resources[common.ResourceName(resource)].Reserved -= reserved
+		g.resources[blueprints.ResourceName(resource)].Reserved -= reserved
 		reserveCache[resource] = reserved
-		g.resources[common.ResourceName(resource)].mx.Unlock()
+		g.resources[blueprints.ResourceName(resource)].mx.Unlock()
 	}
 
 	slog.Info("transformer callback fired", "removed", reserveCache, "added", addCache)
-	spew.Dump(t.Data.AsMap())
 }
 
 func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) (*protobuf.ReserveResponse, error) {
@@ -563,11 +576,11 @@ func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) 
 
 	var err error
 
-	cache := make(map[common.ResourceName]int)
+	cache := make(map[blueprints.ResourceName]int)
 
 	for resource, amount := range resources {
 		amt := int(amount.(float64))
-		resourceName := common.ResourceName(resource)
+		resourceName := blueprints.ResourceName(resource)
 
 		if current, ok := g.resources[resourceName]; ok {
 			current.mx.Lock()
@@ -606,16 +619,16 @@ func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) 
 	}, nil
 }
 
-func (g *Grain) startBuildingGenerators(b common.Building) {
-	for _, gen := range b.Generators {
+func (g *Grain) startBuildingGenerators(b *blueprints.Building) {
+	for _, gen := range b.Generates {
 		if err := g.startGenerator(gen); err != nil {
 			slog.Error("failed to start generator", err, "name", gen.Name)
 		}
 	}
 }
 
-func (g *Grain) startBuildingTransformers(b common.Building) {
-	for _, tr := range b.Transformers {
+func (g *Grain) startBuildingTransformers(b *blueprints.Building) {
+	for _, tr := range b.Transforms {
 		if err := g.startTransformer(tr); err != nil {
 			slog.Error("failed to start transformer", err, "name", tr.Name)
 		}

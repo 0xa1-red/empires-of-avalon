@@ -1,0 +1,68 @@
+---
+kind: Building
+name: House
+build_time: 10s
+cost:
+  - resource: Wood
+    amount: 20
+    permanent: true
+  - resource: Population
+    amount: 2
+    permanent: false
+generates:
+  - name: Population
+    amount: 1
+    tick_length: 2s
+stores:
+  Population: 6
+---
+kind: Building
+name: Warehouse
+build_time: 10s
+cost:
+  - resource: Wood
+    amount: 50
+    permanent: true
+  - resource: Population
+    amount: 5
+    permanent: false
+stores:
+  Wood: 100
+  Stone: 100
+  Planks: 40
+---
+kind: Building
+name: Woodcutter
+build_time: 10s
+cost:
+  - resource: Wood
+    amount: 30
+    permanent: true
+  - resource: Population
+    amount: 3
+    permanent: false
+generates:
+  - name: Wood
+    amount: 3
+    tick_length: 20s
+---
+kind: Building
+name: Lumberyard
+build_time: 10s
+cost:
+  - resource: Wood
+    amount: 50
+    permanent: true
+  - resource: Population
+    amount: 3
+    permanent: false
+transforms:
+  - name: Planks
+    cost:
+      - resource: Wood
+        amount: 5
+        temporary: false
+    result:
+      - resource: Planks
+        amount: 1
+    tick_length: 10s

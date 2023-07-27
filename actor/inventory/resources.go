@@ -2,9 +2,12 @@ package inventory
 
 import (
 	"fmt"
+	"strings"
 	"sync"
 
-	"github.com/0xa1-red/empires-of-avalon/common"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
+	"github.com/google/uuid"
 	lua "github.com/yuin/gopher-lua"
 	"golang.org/x/exp/slog"
 )
@@ -12,7 +15,7 @@ import (
 type ResourceRegister struct {
 	mx *sync.Mutex
 
-	Name       common.ResourceName
+	Name       blueprints.ResourceName
 	CapFormula string
 	Cap        int
 	Amount     int
@@ -34,7 +37,7 @@ type ResourceRegister struct {
 // 	}, nil
 // }
 
-func (rr *ResourceRegister) UpdateCap(resources map[common.ResourceName]*ResourceRegister, buildings map[common.BuildingName]*BuildingRegister) error {
+func (rr *ResourceRegister) UpdateCap(resources map[blueprints.ResourceName]*ResourceRegister, buildings map[uuid.UUID]*BuildingRegister) error {
 	if rr.CapFormula == "" {
 		slog.Debug("no formula defined, skipping cap update", "resource", rr.Name)
 		return nil
@@ -60,8 +63,8 @@ end
 	buildTbl := &lua.LTable{} // nolint
 
 	for _, building := range buildings {
-		slog.Debug("setting building table item", "resource", rr.Name, "name", building.Name, "amount", building.Completed)
-		buildTbl.RawSetString(string(building.Name), lua.LNumber(len(building.Completed)))
+		slog.Debug("setting building table item", "resource", rr.Name, "name", building.Name, "amount", len(building.Completed))
+		buildTbl.RawSetString(strings.ToLower(string(building.Name)), lua.LNumber(len(building.Completed)))
 	}
 
 	if err := l.DoString(fn); err != nil {
@@ -86,10 +89,10 @@ end
 	return nil
 }
 
-func getStartingResources() map[common.ResourceName]*ResourceRegister {
-	registers := make(map[common.ResourceName]*ResourceRegister)
+func getStartingResources() map[blueprints.ResourceName]*ResourceRegister {
+	registers := make(map[blueprints.ResourceName]*ResourceRegister)
 
-	for name, resource := range common.Resources {
+	for name, resource := range registry.GetResources() {
 		registers[name] = &ResourceRegister{
 			mx:         &sync.Mutex{},
 			Name:       name,

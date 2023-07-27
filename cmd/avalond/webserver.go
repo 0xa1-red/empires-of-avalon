@@ -5,12 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/gamecluster"
-	inthttp "github.com/0xa1-red/empires-of-avalon/http"
-	"github.com/0xa1-red/empires-of-avalon/http/api"
-	intmw "github.com/0xa1-red/empires-of-avalon/http/middleware"
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
+	"github.com/0xa1-red/empires-of-avalon/pkg/router"
 	"golang.org/x/exp/slog"
 )
 
@@ -19,16 +14,7 @@ var server *http.Server
 func startServer(wg *sync.WaitGroup, addr string) {
 	defer wg.Done()
 
-	s := chi.NewRouter()
-
-	s.Use(middleware.Logger)
-	s.Use(intmw.AvalonLogger)
-	s.Use(middleware.AllowContentType("application/json"))
-	s.Use(middleware.Timeout(60 * time.Second))
-
-	s.Mount("/api", api.NewRouter(gamecluster.GetC()))
-
-	s.Get("/healthz", inthttp.Healthcheck)
+	s := router.New()
 
 	server = &http.Server{ // nolint:exhaustruct
 		Addr:              addr,

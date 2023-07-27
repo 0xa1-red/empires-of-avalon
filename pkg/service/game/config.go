@@ -1,4 +1,4 @@
-package api
+package game
 
 var (
 	queueBuildings         bool  = false

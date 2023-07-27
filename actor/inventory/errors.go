@@ -3,7 +3,7 @@ package inventory
 import (
 	"fmt"
 
-	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 )
 
 type InsufficientResourceError struct {

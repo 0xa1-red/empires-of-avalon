@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/google/uuid"
 	"golang.org/x/exp/slog"
 )

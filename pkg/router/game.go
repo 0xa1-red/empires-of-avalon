@@ -7,11 +7,12 @@ import (
 	"net/http"
 
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
-	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/middleware"
 	"github.com/0xa1-red/empires-of-avalon/pkg/model"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/auth"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
 	"github.com/go-chi/chi"
@@ -127,15 +128,16 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	building := buildRequest.Building
+	span.SetAttributes(attribute.String("building", buildRequest.Building))
 
-	span.SetAttributes(attribute.String("building", building))
+	building := buildRequest.Building
 
 	amt := game.GetBuildingAmount(buildRequest)
 
-	b, ok := blueprints.Buildings[blueprints.BuildingName(building)]
-	if !ok {
-		err := fmt.Errorf("invalid building type %s", building)
+	buildingID := blueprints.GetBuildingID(building)
+
+	b, err := registry.GetBuilding(buildingID)
+	if err != nil {
 		span.RecordError(err)
 		slog.Error("failed to start building", err,
 			"auth", auth,
@@ -156,7 +158,7 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 	}
 
 	span.SetAttributes(attribute.String("user_id", authUUID.String()))
-	inventory := protobuf.GetInventoryGrainClient(rt.cluster, common.GetInventoryID(authUUID).String())
+	inventory := protobuf.GetInventoryGrainClient(rt.cluster, blueprints.GetInventoryID(authUUID).String())
 
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, &carrier)

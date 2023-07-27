@@ -8,8 +8,8 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/persistence/encoding"
-	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
-	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints/registry"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/asynkron/protoactor-go/cluster"
 	"github.com/google/uuid"

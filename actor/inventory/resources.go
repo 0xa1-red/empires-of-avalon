@@ -5,8 +5,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
-	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints/registry"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/google/uuid"
 	lua "github.com/yuin/gopher-lua"
 	"golang.org/x/exp/slog"

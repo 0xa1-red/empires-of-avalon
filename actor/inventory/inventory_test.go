@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/pkg/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"

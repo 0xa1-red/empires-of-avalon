@@ -45,6 +45,7 @@ type DecoderWithError struct {
 func NewDecoderWithError(r io.Reader) *DecoderWithError {
 	return &DecoderWithError{
 		Decoder: yaml.NewDecoder(r),
+		Err:     nil,
 	}
 }
 

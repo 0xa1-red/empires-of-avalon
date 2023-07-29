@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
+	"github.com/0xa1-red/empires-of-avalon/pkg/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"github.com/asynkron/protoactor-go/cluster"

@@ -7,7 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/instrumentation"
+	"github.com/0xa1-red/empires-of-avalon/pkg/instrumentation"
+	"github.com/0xa1-red/empires-of-avalon/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"golang.org/x/exp/slog"
 
@@ -18,6 +19,10 @@ import (
 )
 
 var server *http.Server
+
+const (
+	instrumentationName string = "github.com/alfreddobradi/empires-of-avalon/instrumentation"
+)
 
 func RegisterMetricsPipeline() error {
 	// The exporter embeds a default OpenTelemetry Reader and
@@ -72,5 +77,6 @@ func Shutdown(ctx context.Context) error {
 }
 
 func Meter() metric.Meter {
-	return otel.Meter("github.com/alfreddobradi/empires-of-avalon/instrumentation")
+	return otel.Meter(
+		instrumentationName, metric.WithInstrumentationVersion(version.Tag))
 }

@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	gamecluster "github.com/0xa1-red/empires-of-avalon/pkg/cluster"
+	"github.com/0xa1-red/empires-of-avalon/pkg/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/pkg/middleware"
 	"github.com/0xa1-red/empires-of-avalon/pkg/model"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/auth"

@@ -5,12 +5,9 @@ go 1.20
 require (
 	github.com/asynkron/protoactor-go v0.0.0-20230712025850-db3ecc53dba5
 	github.com/auth0/go-jwt-middleware/v2 v2.1.0
-	github.com/coreos/go-oidc/v3 v3.6.0
-	github.com/davecgh/go-spew v1.1.1
 	github.com/go-chi/chi v1.5.4
 	github.com/go-chi/cors v1.2.1
 	github.com/go-chi/render v1.0.2
-	github.com/go-session/session/v3 v3.2.1
 	github.com/google/uuid v1.3.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/lib/pq v1.2.0
@@ -27,9 +24,9 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v0.39.0
 	go.opentelemetry.io/otel/trace v1.16.0
 	golang.org/x/exp v0.0.0-20221217163422-3c43f8badb15
-	golang.org/x/oauth2 v0.8.0
 	google.golang.org/grpc v1.56.2
 	google.golang.org/protobuf v1.31.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -38,14 +35,12 @@ require (
 	github.com/asynkron/gofun v0.0.0-20220329210725-34fed760f4c2 // indirect
 	github.com/benbjohnson/clock v1.3.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bytedance/gopkg v0.0.0-20221122125632-68358b8ecec6 // indirect
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/coreos/go-semver v0.3.0 // indirect
 	github.com/coreos/go-systemd/v22 v22.3.2 // indirect
 	github.com/emirpasic/gods v1.18.1 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
-	github.com/go-jose/go-jose/v3 v3.0.0 // indirect
 	github.com/go-logr/logr v1.2.4 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
@@ -83,13 +78,11 @@ require (
 	golang.org/x/net v0.12.0 // indirect
 	golang.org/x/sys v0.10.0 // indirect
 	golang.org/x/text v0.11.0 // indirect
-	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20230706204954-ccb25ca9f130 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20230629202037-9506855d4529 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230711160842-782d3b101e98 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/square/go-jose.v2 v2.6.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
 // Replace this when otel is updated in upstream

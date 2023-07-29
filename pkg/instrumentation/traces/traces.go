@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/0xa1-red/empires-of-avalon/config"
-	"github.com/0xa1-red/empires-of-avalon/instrumentation"
+	"github.com/0xa1-red/empires-of-avalon/pkg/instrumentation"
 	"github.com/spf13/viper"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"

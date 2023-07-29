@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
+	"github.com/0xa1-red/empires-of-avalon/pkg/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"

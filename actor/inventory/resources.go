@@ -106,7 +106,7 @@ func getStartingResources() map[blueprints.ResourceName]*ResourceRegister {
 	return registers
 }
 
-func (rr *ResourceRegister) Update(amount int) {
+func (rr *ResourceRegister) Update(amount int) bool {
 	rr.mx.Lock()
 	defer rr.mx.Unlock()
 
@@ -124,8 +124,7 @@ func (rr *ResourceRegister) Update(amount int) {
 				"reserved", rr.Reserved,
 				"cap", rr.Cap,
 			)
-
-			return
+			return false
 		}
 
 		if newAmount > rr.Cap {
@@ -144,4 +143,5 @@ func (rr *ResourceRegister) Update(amount int) {
 	)
 
 	rr.Amount = newAmount
+	return true
 }

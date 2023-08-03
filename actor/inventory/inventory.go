@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/actor"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
@@ -65,10 +66,11 @@ type BuildingRegister struct {
 type Grain struct {
 	ctx cluster.GrainContext
 
-	buildings     map[uuid.UUID]*BuildingRegister
-	resources     map[blueprints.ResourceName]*ResourceRegister
-	subscriptions map[string]*nats.Subscription
-	callbacks     map[string]*Callback
+	buildings       map[uuid.UUID]*BuildingRegister
+	resources       map[blueprints.ResourceName]*ResourceRegister
+	subscriptions   map[string]*nats.Subscription
+	callbacks       map[string]*Callback
+	heartbeatTicker *time.Ticker
 }
 
 type Callback struct {
@@ -108,6 +110,29 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 			slog.Error("failed to subscribe to callback", err, "callback", cb.Name, "subject", cb.Subject)
 		}
 	}
+
+	if err := actor.SendUpdate(&protobuf.GrainUpdate{
+		UpdateKind: protobuf.UpdateKind_Register,
+		GrainKind:  protobuf.GrainKind_InventoryGrain,
+		Timestamp:  timestamppb.Now(),
+		Identity:   g.ctx.Self().String(),
+	}); err != nil {
+		slog.Warn("failed to send register update to admin actor", err)
+	}
+
+	g.heartbeatTicker = time.NewTicker(30 * time.Second)
+	go func() {
+		for curTime := range g.heartbeatTicker.C {
+			if err := actor.SendUpdate(&protobuf.GrainUpdate{
+				UpdateKind: protobuf.UpdateKind_Heartbeat,
+				GrainKind:  protobuf.GrainKind_InventoryGrain,
+				Timestamp:  timestamppb.New(curTime),
+				Identity:   g.ctx.Self().String(),
+			}); err != nil {
+				slog.Warn("failed to send register update to admin actor", err)
+			}
+		}
+	}()
 }
 
 func (g *Grain) updateLimits() {

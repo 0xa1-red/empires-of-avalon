@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/actor"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -28,12 +29,36 @@ type Timer struct {
 }
 
 type Grain struct {
-	ctx   cluster.GrainContext
-	timer *Timer
+	ctx             cluster.GrainContext
+	timer           *Timer
+	heartbeatTicker *time.Ticker
 }
 
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
+
+	if err := actor.SendUpdate(&protobuf.GrainUpdate{
+		UpdateKind: protobuf.UpdateKind_Register,
+		GrainKind:  protobuf.GrainKind_TimerGrain,
+		Timestamp:  timestamppb.Now(),
+		Identity:   g.Identity(),
+	}); err != nil {
+		slog.Warn("failed to send register update to admin actor", err)
+	}
+
+	g.heartbeatTicker = time.NewTicker(30 * time.Second)
+	go func() {
+		for curTime := range g.heartbeatTicker.C {
+			if err := actor.SendUpdate(&protobuf.GrainUpdate{
+				UpdateKind: protobuf.UpdateKind_Heartbeat,
+				GrainKind:  protobuf.GrainKind_TimerGrain,
+				Timestamp:  timestamppb.New(curTime),
+				Identity:   g.ctx.Self().String(),
+			}); err != nil {
+				slog.Warn("failed to send register update to admin actor", err)
+			}
+		}
+	}()
 }
 
 func (g *Grain) Terminate(ctx cluster.GrainContext) {
@@ -43,6 +68,15 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 		} else {
 			slog.Debug("grain successfully persisted", "kind", g.Kind(), "identity", ctx.Identity(), "written", n)
 		}
+	}
+
+	if err := actor.SendUpdate(&protobuf.GrainUpdate{
+		UpdateKind: protobuf.UpdateKind_Deregister,
+		GrainKind:  protobuf.GrainKind_TimerGrain,
+		Timestamp:  timestamppb.Now(),
+		Identity:   g.ctx.Self().String(),
+	}); err != nil {
+		slog.Warn("failed to send deregister update to admin actor", err)
 	}
 }
 
@@ -148,6 +182,7 @@ func (g *Grain) startBuildingTimer(ctx context.Context) {
 
 		if g.timer.Amount == 0 {
 			t.Stop()
+			g.ctx.Poison(g.ctx.Self())
 		}
 	}
 }

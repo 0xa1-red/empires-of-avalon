@@ -13,9 +13,23 @@ enum Status {
 }
 
 enum TimerKind {
-    Building = 0;
-    Generator = 1;
-    Transformer = 2;
+    UnknownTimer = 0;
+    Building = 1;
+    Generator = 2;
+    Transformer = 3;
+}
+
+enum GrainKind {
+    UnknownGrain = 0;
+    AdminGrain = 1;
+    InventoryGrain = 2;
+    TimerGrain = 3;
+}
+
+enum UpdateKind {
+    Heartbeat = 0;
+    Register = 1;
+    Deregister = 2;
 }
 
 message StartRequest {
@@ -90,6 +104,13 @@ message ReserveResponse {
     google.protobuf.Timestamp Timestamp = 4;
 }
 
+message GrainUpdate {
+    UpdateKind UpdateKind = 1;
+    GrainKind GrainKind = 2;
+    string Identity = 4;
+    google.protobuf.Timestamp Timestamp = 5;
+}
+
 service Inventory {
     rpc Start (StartRequest) returns (StartResponse);
     rpc Describe (DescribeInventoryRequest) returns (DescribeInventoryResponse);
@@ -100,4 +121,8 @@ service Inventory {
 service Timer {
     rpc CreateTimer (TimerRequest) returns (TimerResponse);
     rpc Restore (RestoreRequest) returns (RestoreResponse);
+}
+
+service Admin {
+    rpc Start (Empty) returns (Empty);
 }

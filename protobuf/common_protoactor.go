@@ -508,3 +508,143 @@ func (a *TimerActor) Receive(ctx actor.Context) {
 		a.inner.ReceiveDefault(a.ctx)
 	}
 }
+
+var xAdminFactory func() Admin
+
+// AdminFactory produces a Admin
+func AdminFactory(factory func() Admin) {
+	xAdminFactory = factory
+}
+
+// GetAdminGrainClient instantiates a new AdminGrainClient with given Identity
+func GetAdminGrainClient(c *cluster.Cluster, id string) *AdminGrainClient {
+	if c == nil {
+		panic(fmt.Errorf("nil cluster instance"))
+	}
+	if id == "" {
+		panic(fmt.Errorf("empty id"))
+	}
+	return &AdminGrainClient{Identity: id, cluster: c}
+}
+
+// GetAdminKind instantiates a new cluster.Kind for Admin
+func GetAdminKind(opts ...actor.PropsOption) *cluster.Kind {
+	props := actor.PropsFromProducer(func() actor.Actor {
+		return &AdminActor{
+			Timeout: 60 * time.Second,
+		}
+	}, opts...)
+	kind := cluster.NewKind("Admin", props)
+	return kind
+}
+
+// GetAdminKind instantiates a new cluster.Kind for Admin
+func NewAdminKind(factory func() Admin, timeout time.Duration, opts ...actor.PropsOption) *cluster.Kind {
+	xAdminFactory = factory
+	props := actor.PropsFromProducer(func() actor.Actor {
+		return &AdminActor{
+			Timeout: timeout,
+		}
+	}, opts...)
+	kind := cluster.NewKind("Admin", props)
+	return kind
+}
+
+// Admin interfaces the services available to the Admin
+type Admin interface {
+	Init(ctx cluster.GrainContext)
+	Terminate(ctx cluster.GrainContext)
+	ReceiveDefault(ctx cluster.GrainContext)
+	Start(*Empty, cluster.GrainContext) (*Empty, error)
+}
+
+// AdminGrainClient holds the base data for the AdminGrain
+type AdminGrainClient struct {
+	Identity string
+	cluster  *cluster.Cluster
+}
+
+// Start requests the execution on to the cluster with CallOptions
+func (g *AdminGrainClient) Start(r *Empty, opts ...cluster.GrainCallOption) (*Empty, error) {
+	bytes, err := proto.Marshal(r)
+	if err != nil {
+		return nil, err
+	}
+	reqMsg := &cluster.GrainRequest{MethodIndex: 0, MessageData: bytes}
+	resp, err := g.cluster.Call(g.Identity, "Admin", reqMsg, opts...)
+	if err != nil {
+		return nil, err
+	}
+	switch msg := resp.(type) {
+	case *cluster.GrainResponse:
+		result := &Empty{}
+		err = proto.Unmarshal(msg.MessageData, result)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	case *cluster.GrainErrorResponse:
+		return nil, errors.New(msg.Err)
+	default:
+		return nil, errors.New("unknown response")
+	}
+}
+
+// AdminActor represents the actor structure
+type AdminActor struct {
+	ctx     cluster.GrainContext
+	inner   Admin
+	Timeout time.Duration
+}
+
+// Receive ensures the lifecycle of the actor for the received message
+func (a *AdminActor) Receive(ctx actor.Context) {
+	switch msg := ctx.Message().(type) {
+	case *actor.Started: //pass
+	case *cluster.ClusterInit:
+		a.ctx = cluster.NewGrainContext(ctx, msg.Identity, msg.Cluster)
+		a.inner = xAdminFactory()
+		a.inner.Init(a.ctx)
+
+		if a.Timeout > 0 {
+			ctx.SetReceiveTimeout(a.Timeout)
+		}
+	case *actor.ReceiveTimeout:
+		ctx.Poison(ctx.Self())
+	case *actor.Stopped:
+		a.inner.Terminate(a.ctx)
+	case actor.AutoReceiveMessage: // pass
+	case actor.SystemMessage: // pass
+
+	case *cluster.GrainRequest:
+		switch msg.MethodIndex {
+		case 0:
+			req := &Empty{}
+			err := proto.Unmarshal(msg.MessageData, req)
+			if err != nil {
+				plog.Error("Start(Empty) proto.Unmarshal failed.", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			r0, err := a.inner.Start(req, a.ctx)
+			if err != nil {
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			bytes, err := proto.Marshal(r0)
+			if err != nil {
+				plog.Error("Start(Empty) proto.Marshal failed", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			resp := &cluster.GrainResponse{MessageData: bytes}
+			ctx.Respond(resp)
+
+		}
+	default:
+		a.inner.ReceiveDefault(a.ctx)
+	}
+}

@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/actor/admin"
 	"github.com/0xa1-red/empires-of-avalon/actor/inventory"
 	"github.com/0xa1-red/empires-of-avalon/actor/timer"
 	"github.com/0xa1-red/empires-of-avalon/config"
@@ -106,13 +107,21 @@ func main() {
 	timerKind := protobuf.NewTimerKind(func() protobuf.Timer {
 		return &timer.Grain{}
 	}, 0)
+	adminKind := protobuf.NewAdminKind(func() protobuf.Admin {
+		return &admin.Grain{}
+	}, 0)
 	clusterConfig := cluster.Configure(viper.GetString(config.Cluster_Name), provider, lookup, remoteConfig,
-		cluster.WithKinds(inventoryKind, timerKind))
+		cluster.WithKinds(inventoryKind, timerKind, adminKind))
 
 	c := cluster.New(system, clusterConfig)
 	c.StartMember()
 	gamecluster.SetC(c)
 	persistence.Create(c)
+
+	if _, err := protobuf.GetAdminGrainClient(c, admin.AdminID.String()).Start(&protobuf.Empty{}); err != nil {
+		slog.Error("failed to get admin grain client", err)
+		exit(1)
+	}
 
 	restoreSnapshots("inventory")
 	restoreSnapshots("timer")

@@ -10,4 +10,8 @@ type Blueprint interface {
 	Decode(src []byte) error
 	Kind() string
 	GetID() string
+	GetVersion() int
 }
+
+var _ Blueprint = (*Building)(nil)
+var _ Blueprint = (*Resource)(nil)

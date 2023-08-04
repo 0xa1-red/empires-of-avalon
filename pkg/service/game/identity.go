@@ -1,4 +1,4 @@
-package blueprints
+package game
 
 import (
 	"fmt"

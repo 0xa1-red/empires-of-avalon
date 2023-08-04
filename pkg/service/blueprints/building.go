@@ -31,6 +31,7 @@ type Building struct {
 	Transforms     []Transformer        `json:"transforms" yaml:"transforms"`
 	Stores         map[ResourceName]int `json:"stores" yaml:"stores"`
 	BuildTime      string               `json:"build_time" yaml:"build_time"`
+	Version        int                  `json:"version" yaml:"version"`
 }
 
 type Generator struct {
@@ -117,4 +118,8 @@ func (b *Building) Kind() string {
 
 func (b *Building) GetID() string {
 	return b.ID.String()
+}
+
+func (b *Building) GetVersion() int {
+	return b.Version
 }

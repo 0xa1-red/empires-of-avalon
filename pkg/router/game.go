@@ -11,7 +11,6 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/pkg/middleware"
 	"github.com/0xa1-red/empires-of-avalon/pkg/model"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/auth"
-	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -131,7 +130,7 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 
 	amt := game.GetBuildingAmount(buildRequest)
 
-	buildingID := blueprints.GetBuildingID(building)
+	buildingID := game.GetBuildingID(building)
 
 	b, err := registry.GetBuilding(buildingID)
 	if err != nil {
@@ -155,7 +154,7 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 	}
 
 	span.SetAttributes(attribute.String("user_id", authUUID.String()))
-	inventory := protobuf.GetInventoryGrainClient(gamecluster.GetC(), blueprints.GetInventoryID(authUUID).String())
+	inventory := protobuf.GetInventoryGrainClient(gamecluster.GetC(), game.GetInventoryID(authUUID).String())
 
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, &carrier)

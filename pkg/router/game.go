@@ -25,16 +25,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-type Router struct {
-	chi.Router
-}
-
-func GameRouter() *Router {
+func GameRouter() *chi.Mux {
 	r := chi.NewRouter()
-
-	router := &Router{
-		Router: r,
-	}
 
 	r.Use(cors.Handler(cors.Options{ // nolint:exhaustruct
 		AllowedOrigins:   []string{"http://localhost:5173"},
@@ -47,24 +39,14 @@ func GameRouter() *Router {
 
 	r.Group(func(r chi.Router) {
 		r.Use(auth.EnsureValidToken())
-		r.Get("/inventory", router.Inventory)
-		r.Post("/build", router.Build)
+		r.Get("/inventory", inventory)
+		r.Post("/build", build)
 	})
 
-	return router
+	return r
 }
 
-func (rt *Router) Index(w http.ResponseWriter, r *http.Request) {
-	resp := model.CommonResponse{
-		Status:     http.StatusOK,
-		StatusText: http.StatusText(http.StatusOK),
-		Message:    "Hi",
-	}
-
-	render.JSON(w, r, resp)
-}
-
-func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
+func inventory(w http.ResponseWriter, r *http.Request) {
 	ctx, span := traces.Start(r.Context(), "api/router/inventory")
 	defer span.End()
 
@@ -99,7 +81,7 @@ func (rt *Router) Inventory(w http.ResponseWriter, r *http.Request) {
 	render.JSON(w, r, res)
 }
 
-func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
+func build(w http.ResponseWriter, r *http.Request) {
 	ctx, span := traces.Start(r.Context(), "api/router/build")
 	defer span.End()
 

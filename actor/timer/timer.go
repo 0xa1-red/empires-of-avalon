@@ -42,7 +42,7 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		UpdateKind: protobuf.UpdateKind_Register,
 		GrainKind:  protobuf.GrainKind_TimerGrain,
 		Timestamp:  timestamppb.Now(),
-		Identity:   g.Identity(),
+		Identity:   g.ctx.Self().String(),
 	}); err != nil {
 		slog.Warn("failed to send register update to admin actor", err)
 	}
@@ -378,4 +378,34 @@ func getResourcesFromTimer(ctx context.Context, t *Timer) (map[string]interface{
 	}
 
 	return resources, nil
+}
+
+func (g *Grain) Describe(req *protobuf.DescribeTimerRequest, ctx cluster.GrainContext) (*protobuf.DescribeTimerResponse, error) {
+	timer := make(map[string]interface{})
+
+	timer["timer_id"] = g.timer.TimerID
+	timer["kind"] = g.timer.Kind
+	timer["inventory_id"] = g.timer.InventoryID
+	timer["reply_subject"] = g.timer.Reply
+	timer["amount"] = g.timer.Amount
+	timer["start"] = g.timer.Start.Format(time.RFC1123)
+	timer["interval"] = g.timer.Interval.String()
+	timer["data"] = g.timer.Data
+
+	timeStruct, err := structpb.NewStruct(timer)
+	if err != nil {
+		return &protobuf.DescribeTimerResponse{
+			Timer:     nil,
+			Timestamp: timestamppb.Now(),
+			Status:    protobuf.Status_Error,
+			Error:     err.Error(),
+		}, nil
+	}
+
+	return &protobuf.DescribeTimerResponse{
+		Timer:     timeStruct,
+		Timestamp: timestamppb.Now(),
+		Status:    protobuf.Status_OK,
+		Error:     "",
+	}, nil
 }

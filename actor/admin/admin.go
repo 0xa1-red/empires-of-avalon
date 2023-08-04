@@ -15,6 +15,8 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/exp/slog"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var AdminID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("avalon.admin"))
@@ -22,10 +24,31 @@ var AdminSubject = fmt.Sprintf("admin-updates-%s", AdminID.String())
 
 type actor struct {
 	Identity    string
-	PID         *pactor.PID
+	PID         *ActorPID
 	LastSeen    time.Time
 	Kind        protobuf.GrainKind
 	Tolerations int
+}
+
+type ActorPID struct {
+	*pactor.PID
+
+	GrainID uuid.UUID
+}
+
+func (a ActorPID) GetGrainID() uuid.UUID {
+	return a.GrainID
+}
+
+func (a actor) AsMap() map[string]interface{} {
+	return map[string]interface{}{
+		"identity":    a.Identity,
+		"grain_id":    a.PID.GrainID,
+		"pid":         a.PID.String(),
+		"last_seen":   a.LastSeen.Format(time.RFC1123),
+		"kind":        a.Kind.String(),
+		"tolerations": a.Tolerations,
+	}
 }
 
 type registry struct {
@@ -34,7 +57,12 @@ type registry struct {
 }
 
 func (g *Grain) add(a actor) {
-	a.PID = PIDFromIdentity(a.Identity)
+	pid, err := PIDFromIdentity(a.Identity)
+	if err != nil {
+		slog.Error("failed to get PID from identity", err, "identity", a.Identity)
+	}
+
+	a.PID = pid
 
 	switch a.Kind {
 	case protobuf.GrainKind_InventoryGrain:
@@ -181,12 +209,17 @@ func (g *Grain) Start(_ *protobuf.Empty, ctx cluster.GrainContext) (*protobuf.Em
 }
 
 func (g *Grain) messageCallback(t *protobuf.GrainUpdate) {
+	pid, err := PIDFromIdentity(t.Identity)
+	if err != nil {
+		slog.Error("failed to get PID from identity", err, "identity", t.Identity)
+	}
+
 	a := actor{
 		Identity:    t.Identity,
 		LastSeen:    t.Timestamp.AsTime(),
 		Kind:        t.GrainKind,
 		Tolerations: 0,
-		PID:         nil,
+		PID:         pid,
 	}
 
 	switch t.UpdateKind {
@@ -200,4 +233,42 @@ func (g *Grain) messageCallback(t *protobuf.GrainUpdate) {
 		slog.Warn("unknown update kind", "kind", t.UpdateKind.Number())
 		return
 	}
+}
+
+func (g *Grain) Describe(req *protobuf.DescribeAdminRequest, ctx cluster.GrainContext) (*protobuf.DescribeAdminResponse, error) {
+	inventoryRegistry := make(map[string]interface{})
+	for k, v := range g.registry.Inventories {
+		inventoryRegistry[k] = v.AsMap()
+	}
+
+	timerRegistry := make(map[string]interface{})
+	for k, v := range g.registry.Timers {
+		timerRegistry[k] = v.AsMap()
+	}
+
+	registry := map[string]interface{}{
+		"inventories": inventoryRegistry,
+		"timers":      timerRegistry,
+	}
+
+	admin := map[string]interface{}{
+		"registry": registry,
+	}
+
+	adminStruct, err := structpb.NewStruct(admin)
+	if err != nil {
+		return &protobuf.DescribeAdminResponse{
+			Admin:     nil,
+			Timestamp: timestamppb.Now(),
+			Status:    protobuf.Status_Error,
+			Error:     err.Error(),
+		}, nil
+	}
+
+	return &protobuf.DescribeAdminResponse{
+		Admin:     adminStruct,
+		Timestamp: timestamppb.Now(),
+		Status:    protobuf.Status_OK,
+		Error:     "",
+	}, nil
 }

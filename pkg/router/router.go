@@ -24,6 +24,7 @@ func New() *chi.Mux {
 	s.Use(middleware.Timeout(60 * time.Second))
 
 	s.Mount("/api", GameRouter())
+	s.Mount("/admin", AdminRouter())
 
 	s.Get("/healthz", Healthcheck)
 

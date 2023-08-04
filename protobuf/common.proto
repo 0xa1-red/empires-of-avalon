@@ -92,6 +92,30 @@ message DescribeInventoryResponse {
     google.protobuf.Timestamp Timestamp = 2;
 }
 
+message DescribeTimerRequest {
+    string TraceID = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+}
+
+message DescribeTimerResponse {
+    google.protobuf.Struct Timer = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+    Status Status = 3;
+    string Error = 4;
+}
+
+message DescribeAdminRequest {
+    string TraceID = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+}
+
+message DescribeAdminResponse {
+    google.protobuf.Struct Admin = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+    Status Status = 3;
+    string Error = 4;
+}
+
 message RestoreRequest {
     bytes Data = 1;
 }
@@ -130,8 +154,10 @@ service Inventory {
 service Timer {
     rpc CreateTimer (TimerRequest) returns (TimerResponse);
     rpc Restore (RestoreRequest) returns (RestoreResponse);
+    rpc Describe (DescribeTimerRequest) returns (DescribeTimerResponse);
 }
 
 service Admin {
     rpc Start (Empty) returns (Empty);
+    rpc Describe (DescribeAdminRequest) returns (DescribeAdminResponse);
 }

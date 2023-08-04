@@ -29,6 +29,9 @@ const (
 	CallbackBuildings    = "buildings"
 	CallbackGenerators   = "generators"
 	CallbackTransformers = "transformers"
+	CallbackTimerStopped = "timer-stopped"
+
+	SubjectTimerStatus = "timer-status"
 
 	KeyBuilding          = "building"
 	KeyDisableGenerators = "disable_generators"
@@ -72,6 +75,7 @@ type Grain struct {
 	subscriptions   map[string]*nats.Subscription
 	callbacks       map[string]*Callback
 	heartbeatTicker *time.Ticker
+	timers          map[uuid.UUID]struct{}
 }
 
 type Callback struct {
@@ -83,6 +87,7 @@ type Callback struct {
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
 	g.subscriptions = make(map[string]*nats.Subscription)
+	g.timers = make(map[uuid.UUID]struct{})
 	g.callbacks = map[string]*Callback{
 		CallbackGenerators: {
 			Name:    CallbackGenerators,
@@ -108,8 +113,18 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 
 	for _, cb := range g.callbacks {
 		if err := g.subscribeToCallback(cb); err != nil {
-			slog.Error("failed to subscribe to callback", err, "callback", cb.Name, "subject", cb.Subject)
+			slog.Error("failed to subscribe to callback", err,
+				"callback", cb.Name,
+				"subject", cb.Subject,
+			)
 		}
+	}
+
+	if err := g.subscribeToTimerStopped(); err != nil {
+		slog.Error("failed to subscribe to callback", err,
+			"callback", CallbackTimerStopped,
+			"subject", SubjectTimerStatus,
+		)
 	}
 
 	if err := actor.SendUpdate(&protobuf.GrainUpdate{
@@ -164,7 +179,7 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}
 
-func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*protobuf.StartResponse, error) {
+func (g *Grain) StartBuilding(req *protobuf.StartBuildingRequest, ctx cluster.GrainContext) (*protobuf.StartBuildingResponse, error) {
 	carrier := propagation.MapCarrier{}
 	carrier.Set("traceparent", req.TraceID)
 	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
@@ -174,7 +189,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	blueprint, err := registry.GetBuilding(game.GetBuildingID(req.Name))
 	if err != nil {
-		return &protobuf.StartResponse{
+		return &protobuf.StartBuildingResponse{
 			Status:    protobuf.Status_Error,
 			Error:     fmt.Sprintf("Invalid building name: %s", req.Name),
 			Timestamp: timestamppb.Now(),
@@ -196,7 +211,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	}
 
 	if queue > 0 {
-		return &protobuf.StartResponse{
+		return &protobuf.StartBuildingResponse{
 			Status:    protobuf.Status_Error,
 			Error:     "All building slots are occupied",
 			Timestamp: timestamppb.Now(),
@@ -212,7 +227,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	}
 
 	if len(insufficient) > 0 {
-		return &protobuf.StartResponse{
+		return &protobuf.StartBuildingResponse{
 			Status:    protobuf.Status_Error,
 			Error:     fmt.Sprintf("Insufficient resources: %s", strings.Join(insufficient, ", ")),
 			Timestamp: timestamppb.Now(),
@@ -224,8 +239,10 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	otel.GetTextMapPropagator().Inject(sctx, &carrier)
 
-	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
+	timerID := uuid.New()
+	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), timerID.String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		TimerID:     timerID.String(),
 		TraceID:     carrier.Get("traceparent"),
 		Kind:        protobuf.TimerKind_Building,
 		Reply:       g.callbacks[CallbackBuildings].Subject,
@@ -242,7 +259,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	})
 
 	if err != nil {
-		return &protobuf.StartResponse{
+		return &protobuf.StartBuildingResponse{
 			Status:    protobuf.Status_Error,
 			Error:     err.Error(),
 			Timestamp: timestamppb.Now(),
@@ -254,6 +271,8 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		slog.Time("deadline", res.Deadline.AsTime()),
 		slog.Time("timestamp", res.Timestamp.AsTime()),
 	)
+
+	g.timers[timerID] = struct{}{}
 
 	reserved := make([]ReservedResource, 0)
 	for _, resource := range blueprint.Cost {
@@ -275,7 +294,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	g.buildings[blueprint.ID].Queue = append(g.buildings[blueprint.ID].Queue, build)
 
-	return &protobuf.StartResponse{
+	return &protobuf.StartBuildingResponse{
 		Status:    protobuf.Status_OK,
 		Timestamp: timestamppb.Now(),
 		Error:     "",
@@ -287,85 +306,37 @@ func (g *Grain) Describe(req *protobuf.DescribeInventoryRequest, ctx cluster.Gra
 	carrier.Set("traceparent", req.TraceID)
 	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
 
-	_, span := traces.Start(pctx, "actor/inventory/describe")
+	nctx, span := traces.Start(pctx, "actor/inventory/describe")
 	defer span.End()
 
-	buildingValues := make(map[string]*structpb.Value)
-	resourceValues := make(map[string]*structpb.Value)
+	buildingValues := g.describeBuildings(nctx)
+	resourceValues := g.describeResources(nctx)
 
-	for _, meta := range g.buildings {
-		completedList := make([]*structpb.Value, 0)
-
-		for _, state := range meta.Completed {
-			finish := ""
-			if !state.Completion.IsZero() {
-				finish = state.Completion.Format(time.RFC3339)
-			}
-
-			b := structpb.NewStructValue(&structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					"state":           structpb.NewStringValue(state.State),
-					"workers_max":     structpb.NewNumberValue(float64(state.WorkersMaximum)),
-					"workers_current": structpb.NewNumberValue(float64(state.WorkersCurrent)),
-					"completion":      structpb.NewStringValue(finish),
-				},
-			})
-
-			completedList = append(completedList, b)
-		}
-
-		queuedList := make([]*structpb.Value, 0)
-
-		for _, state := range meta.Queue {
-			finish := ""
-			if !state.Completion.IsZero() && state.Completion.After(time.Now()) {
-				finish = state.Completion.Format(time.RFC3339)
-			}
-
-			b := structpb.NewStructValue(&structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					"state":      structpb.NewStringValue(state.State),
-					"completion": structpb.NewStringValue(finish),
-				},
-			})
-
-			queuedList = append(queuedList, b)
-		}
-
-		completed := structpb.NewListValue(&structpb.ListValue{
-			Values: completedList,
-		})
-		queued := structpb.NewListValue(&structpb.ListValue{
-			Values: queuedList,
-		})
-
-		buildingValues[meta.Name.String()] = structpb.NewStructValue(&structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				"completed": completed,
-				"queued":    queued,
-			},
-		})
+	fields := map[string]*structpb.Value{
+		"buildings": structpb.NewStructValue(&structpb.Struct{
+			Fields: buildingValues,
+		}),
+		"resources": structpb.NewStructValue(&structpb.Struct{
+			Fields: resourceValues,
+		}),
 	}
 
-	for resource, meta := range g.resources {
-		resourceValues[string(resource)] = structpb.NewStructValue(&structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				"amount":   structpb.NewNumberValue(float64(meta.Amount)),
-				"reserved": structpb.NewNumberValue(float64(meta.Reserved)),
-				"cap":      structpb.NewNumberValue(float64(meta.Cap)),
-			},
-		})
+	if req.GetTimers {
+		t := make(map[string]interface{})
+		for k, v := range g.timers {
+			t[k.String()] = v
+		}
+
+		timers, err := structpb.NewStruct(t)
+		if err == nil {
+			fields["timers"] = structpb.NewStructValue(timers)
+		} else {
+			slog.Warn("failed to collect timers for describe response", err)
+		}
 	}
 
 	inventory := &structpb.Struct{
-		Fields: map[string]*structpb.Value{
-			"buildings": structpb.NewStructValue(&structpb.Struct{
-				Fields: buildingValues,
-			}),
-			"resources": structpb.NewStructValue(&structpb.Struct{
-				Fields: resourceValues,
-			}),
-		},
+		Fields: fields,
 	}
 
 	return &protobuf.DescribeInventoryResponse{
@@ -407,8 +378,11 @@ func getStartingBuildings() map[uuid.UUID]*BuildingRegister {
 func (g *Grain) startGenerator(generator blueprints.Generator) error {
 	slog.Debug("starting generator", "name", generator.Name)
 
-	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
+	timerID := uuid.New()
+
+	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), timerID.String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		TimerID:     timerID.String(),
 		TraceID:     "",
 		Kind:        protobuf.TimerKind_Generator,
 		Reply:       g.callbacks[CallbackGenerators].Subject,
@@ -439,8 +413,11 @@ func (g *Grain) startGenerator(generator blueprints.Generator) error {
 func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
 	slog.Debug("starting transformer", "name", transformer.Name)
 
-	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
+	timerID := uuid.New()
+
+	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), timerID.String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		TimerID:     timerID.String(),
 		TraceID:     "",
 		Kind:        protobuf.TimerKind_Transformer,
 		Reply:       g.callbacks[CallbackTransformers].Subject,
@@ -590,6 +567,17 @@ func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
 	slog.Info("transformer callback fired", "removed", reserveCache, "added", addCache)
 }
 
+func (g *Grain) timerStoppedCallback(t *protobuf.TimerStopped) {
+	id, err := uuid.Parse(t.TimerID)
+	if err != nil {
+		slog.Error("failed to parse timer ID", err, "timer_id", t.TimerID, "timestamp", t.Timestamp.AsTime().Format(time.RFC1123))
+		return
+	}
+
+	delete(g.timers, id)
+	slog.Debug("removed timer from register", "timer_id", t.TimerID, "timestamp", t.Timestamp.AsTime().Format(time.RFC1123))
+}
+
 func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) (*protobuf.ReserveResponse, error) {
 	carrier := propagation.MapCarrier{}
 	carrier.Set("traceparent", req.TraceID)
@@ -659,4 +647,107 @@ func (g *Grain) startBuildingTransformers(b *blueprints.Building) {
 			slog.Error("failed to start transformer", err, "name", tr.Name)
 		}
 	}
+}
+
+func (g *Grain) subscribeToTimerStopped() error {
+	subject := "timer-status"
+
+	transport, err := intnats.GetConnection()
+	if err != nil {
+		return err
+	}
+
+	sub, err := transport.Subscribe(subject, g.timerStoppedCallback)
+
+	if err != nil {
+		return err
+	}
+
+	slog.Debug("subscribed to callback subject", "subject", subject)
+
+	g.subscriptions[CallbackTimerStopped] = sub
+
+	return nil
+}
+
+func (g *Grain) describeBuildings(ctx context.Context) map[string]*structpb.Value {
+	_, span := traces.Start(ctx, "actor/inventory/describe_buildings")
+	defer span.End()
+
+	buildingValues := make(map[string]*structpb.Value)
+
+	for _, meta := range g.buildings {
+		completedList := make([]*structpb.Value, 0)
+
+		for _, state := range meta.Completed {
+			finish := ""
+			if !state.Completion.IsZero() {
+				finish = state.Completion.Format(time.RFC3339)
+			}
+
+			b := structpb.NewStructValue(&structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					"state":           structpb.NewStringValue(state.State),
+					"workers_max":     structpb.NewNumberValue(float64(state.WorkersMaximum)),
+					"workers_current": structpb.NewNumberValue(float64(state.WorkersCurrent)),
+					"completion":      structpb.NewStringValue(finish),
+				},
+			})
+
+			completedList = append(completedList, b)
+		}
+
+		queuedList := make([]*structpb.Value, 0)
+
+		for _, state := range meta.Queue {
+			finish := ""
+			if !state.Completion.IsZero() && state.Completion.After(time.Now()) {
+				finish = state.Completion.Format(time.RFC3339)
+			}
+
+			b := structpb.NewStructValue(&structpb.Struct{
+				Fields: map[string]*structpb.Value{
+					"state":      structpb.NewStringValue(state.State),
+					"completion": structpb.NewStringValue(finish),
+				},
+			})
+
+			queuedList = append(queuedList, b)
+		}
+
+		completed := structpb.NewListValue(&structpb.ListValue{
+			Values: completedList,
+		})
+		queued := structpb.NewListValue(&structpb.ListValue{
+			Values: queuedList,
+		})
+
+		buildingValues[meta.Name.String()] = structpb.NewStructValue(&structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"completed": completed,
+				"queued":    queued,
+			},
+		})
+	}
+
+	return buildingValues
+}
+
+func (g *Grain) describeResources(ctx context.Context) map[string]*structpb.Value {
+	_, span := traces.Start(ctx, "actor/inventory/describe_resources")
+	defer span.End()
+
+	resourceValues := make(map[string]*structpb.Value)
+
+	for resource, meta := range g.resources {
+		resourceValues[string(resource)] = structpb.NewStructValue(&structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"amount":   structpb.NewNumberValue(float64(meta.Amount)),
+				"reserved": structpb.NewNumberValue(float64(meta.Reserved)),
+				"cap":      structpb.NewNumberValue(float64(meta.Cap)),
+			},
+		})
+	}
+
+	return resourceValues
 }

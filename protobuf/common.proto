@@ -32,14 +32,14 @@ enum UpdateKind {
     Deregister = 2;
 }
 
-message StartRequest {
+message StartBuildingRequest {
     string TraceID = 1;
     string Name = 2;
     int64 Amount = 3;
     google.protobuf.Timestamp Timestamp = 4;
 }
 
-message StartResponse {
+message StartBuildingResponse {
     Status Status = 1;
     string Error = 2;
     google.protobuf.Timestamp Timestamp = 3;
@@ -52,30 +52,39 @@ message FinishResponse {
 }
 
 message TimerRequest {
-    string TraceID = 1;
-    TimerKind Kind = 2;
-    string Reply = 3;
-    string Duration = 4;
-    string InventoryID = 5;
-    google.protobuf.Struct Data = 6;
-    google.protobuf.Timestamp Timestamp = 7;
+    string TimerID = 1;
+    string TraceID = 2;
+    TimerKind Kind = 3;
+    string Reply = 4;
+    string Duration = 5;
+    string InventoryID = 6;
+    google.protobuf.Struct Data = 7;
+    google.protobuf.Timestamp Timestamp = 8;
 }
 
 message TimerResponse {
-    Status Status = 1;
-    string Error = 2;
-    google.protobuf.Timestamp Deadline = 3;
-    google.protobuf.Timestamp Timestamp = 4;
+    string TimerID = 1;
+    Status Status = 2;
+    string Error = 3;
+    google.protobuf.Timestamp Deadline = 4;
+    google.protobuf.Timestamp Timestamp = 5;
 }
 
 message TimerFired {
-    google.protobuf.Timestamp Timestamp = 1;
-    google.protobuf.Struct Data = 2;
+    string TimerID = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+    google.protobuf.Struct Data = 3;
+}
+
+message TimerStopped {
+    string TimerID = 1;
+    google.protobuf.Timestamp Timestamp = 2;
 }
 
 message DescribeInventoryRequest {
     string TraceID = 1;
     google.protobuf.Timestamp Timestamp = 2;
+    bool GetTimers = 3;
 }
 
 message DescribeInventoryResponse {
@@ -112,7 +121,7 @@ message GrainUpdate {
 }
 
 service Inventory {
-    rpc Start (StartRequest) returns (StartResponse);
+    rpc StartBuilding (StartBuildingRequest) returns (StartBuildingResponse);
     rpc Describe (DescribeInventoryRequest) returns (DescribeInventoryResponse);
     rpc Restore (RestoreRequest) returns (RestoreResponse);
     rpc Reserve (ReserveRequest) returns (ReserveResponse);

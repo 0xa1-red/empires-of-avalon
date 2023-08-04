@@ -19,6 +19,7 @@ import (
 )
 
 type Timer struct {
+	TimerID     string
 	Kind        protobuf.TimerKind
 	InventoryID string
 	Reply       string
@@ -103,6 +104,7 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 	}
 
 	g.timer = &Timer{
+		TimerID:     req.TimerID,
 		Kind:        req.Kind,
 		Reply:       req.Reply,
 		Start:       start,
@@ -129,6 +131,7 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 	deadline = deadline.Add(d)
 
 	return &protobuf.TimerResponse{
+		TimerID:   req.TimerID,
 		Status:    protobuf.Status_OK,
 		Deadline:  timestamppb.New(deadline),
 		Timestamp: timestamppb.Now(),
@@ -156,6 +159,7 @@ func (g *Grain) startBuildingTimer(ctx context.Context) {
 		nextTrigger := g.timer.Start.Add(g.timer.Interval)
 		if nextTrigger.Before(now) {
 			if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+				TimerID:   g.timer.TimerID,
 				Timestamp: timestamppb.New(now),
 				Data:      d.GetStructValue(),
 			}); err != nil {
@@ -174,6 +178,7 @@ func (g *Grain) startBuildingTimer(ctx context.Context) {
 		slog.Debug("timer fired", "kind", g.timer.Kind.String(), "reply", g.timer.Reply, "inventory", g.timer.InventoryID)
 
 		if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+			TimerID:   g.timer.TimerID,
 			Timestamp: timestamppb.New(curTime),
 			Data:      d.GetStructValue(),
 		}); err != nil {
@@ -183,6 +188,13 @@ func (g *Grain) startBuildingTimer(ctx context.Context) {
 		if g.timer.Amount == 0 {
 			t.Stop()
 			g.ctx.Poison(g.ctx.Self())
+
+			if err := conn.Publish("timer-status", &protobuf.TimerStopped{
+				TimerID:   g.timer.TimerID,
+				Timestamp: timestamppb.New(curTime),
+			}); err != nil {
+				slog.Error("failed to send TimerStopped message", err)
+			}
 		}
 	}
 }
@@ -207,6 +219,7 @@ func (g *Grain) startGenerateTimer(ctx context.Context) {
 		nextTrigger := g.timer.Start.Add(g.timer.Interval)
 		if nextTrigger.Before(now) {
 			if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+				TimerID:   g.timer.TimerID,
 				Timestamp: timestamppb.New(now),
 				Data:      d.GetStructValue(),
 			}); err != nil {
@@ -225,6 +238,7 @@ func (g *Grain) startGenerateTimer(ctx context.Context) {
 		slog.Debug("timer fired", "kind", g.timer.Kind.String(), "reply", g.timer.Reply, "inventory", g.timer.InventoryID)
 
 		if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+			TimerID:   g.timer.TimerID,
 			Timestamp: timestamppb.New(curTime),
 			Data:      d.GetStructValue(),
 		}); err != nil {
@@ -253,6 +267,7 @@ func (g *Grain) startTransformTimer(ctx context.Context) {
 		nextTrigger := g.timer.Start.Add(g.timer.Interval)
 		if nextTrigger.Before(now) {
 			if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+				TimerID:   g.timer.TimerID,
 				Timestamp: timestamppb.New(now),
 				Data:      d.GetStructValue(),
 			}); err != nil {
@@ -279,13 +294,14 @@ func (g *Grain) startTransformTimer(ctx context.Context) {
 			slog.Debug("timer fired", "kind", g.timer.Kind.String(), "reply", g.timer.Reply, "inventory", g.timer.InventoryID)
 
 			if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+				TimerID:   g.timer.TimerID,
 				Timestamp: timestamppb.New(curTime),
 				Data:      d.GetStructValue(),
 			}); err != nil {
 				slog.Error("failed to send TimerFired message", err)
 			}
 		} else {
-			slog.Error("timer skipped, because of reserve error", err)
+			slog.Error("timer skipped because of reserve error", err)
 		}
 	}
 }

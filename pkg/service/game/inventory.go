@@ -24,6 +24,7 @@ func Describe(ctx context.Context, userID uuid.UUID) (*protobuf.DescribeInventor
 	res, err := inventory.Describe(&protobuf.DescribeInventoryRequest{
 		TraceID:   carrier.Get("traceparent"),
 		Timestamp: timestamppb.Now(),
+		GetTimers: false,
 	})
 
 	return res, err

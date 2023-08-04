@@ -71,7 +71,7 @@ type Inventory interface {
 	Init(ctx cluster.GrainContext)
 	Terminate(ctx cluster.GrainContext)
 	ReceiveDefault(ctx cluster.GrainContext)
-	Start(*StartRequest, cluster.GrainContext) (*StartResponse, error)
+	StartBuilding(*StartBuildingRequest, cluster.GrainContext) (*StartBuildingResponse, error)
 	Describe(*DescribeInventoryRequest, cluster.GrainContext) (*DescribeInventoryResponse, error)
 	Restore(*RestoreRequest, cluster.GrainContext) (*RestoreResponse, error)
 	Reserve(*ReserveRequest, cluster.GrainContext) (*ReserveResponse, error)
@@ -83,8 +83,8 @@ type InventoryGrainClient struct {
 	cluster  *cluster.Cluster
 }
 
-// Start requests the execution on to the cluster with CallOptions
-func (g *InventoryGrainClient) Start(r *StartRequest, opts ...cluster.GrainCallOption) (*StartResponse, error) {
+// StartBuilding requests the execution on to the cluster with CallOptions
+func (g *InventoryGrainClient) StartBuilding(r *StartBuildingRequest, opts ...cluster.GrainCallOption) (*StartBuildingResponse, error) {
 	bytes, err := proto.Marshal(r)
 	if err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func (g *InventoryGrainClient) Start(r *StartRequest, opts ...cluster.GrainCallO
 	}
 	switch msg := resp.(type) {
 	case *cluster.GrainResponse:
-		result := &StartResponse{}
+		result := &StartBuildingResponse{}
 		err = proto.Unmarshal(msg.MessageData, result)
 		if err != nil {
 			return nil, err
@@ -216,15 +216,15 @@ func (a *InventoryActor) Receive(ctx actor.Context) {
 	case *cluster.GrainRequest:
 		switch msg.MethodIndex {
 		case 0:
-			req := &StartRequest{}
+			req := &StartBuildingRequest{}
 			err := proto.Unmarshal(msg.MessageData, req)
 			if err != nil {
-				plog.Error("Start(StartRequest) proto.Unmarshal failed.", logmod.Error(err))
+				plog.Error("StartBuilding(StartBuildingRequest) proto.Unmarshal failed.", logmod.Error(err))
 				resp := &cluster.GrainErrorResponse{Err: err.Error()}
 				ctx.Respond(resp)
 				return
 			}
-			r0, err := a.inner.Start(req, a.ctx)
+			r0, err := a.inner.StartBuilding(req, a.ctx)
 			if err != nil {
 				resp := &cluster.GrainErrorResponse{Err: err.Error()}
 				ctx.Respond(resp)
@@ -232,7 +232,7 @@ func (a *InventoryActor) Receive(ctx actor.Context) {
 			}
 			bytes, err := proto.Marshal(r0)
 			if err != nil {
-				plog.Error("Start(StartRequest) proto.Marshal failed", logmod.Error(err))
+				plog.Error("StartBuilding(StartBuildingRequest) proto.Marshal failed", logmod.Error(err))
 				resp := &cluster.GrainErrorResponse{Err: err.Error()}
 				ctx.Respond(resp)
 				return

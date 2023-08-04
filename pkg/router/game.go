@@ -159,7 +159,7 @@ func (rt *Router) Build(w http.ResponseWriter, r *http.Request) {
 	carrier := propagation.MapCarrier{}
 	otel.GetTextMapPropagator().Inject(ctx, &carrier)
 
-	res, err := inventory.Start(&protobuf.StartRequest{
+	res, err := inventory.StartBuilding(&protobuf.StartBuildingRequest{
 		TraceID:   carrier.Get("traceparent"),
 		Name:      string(b.Name),
 		Amount:    amt,

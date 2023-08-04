@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/google/uuid"
 	"golang.org/x/exp/slog"
 	"gopkg.in/yaml.v3"
@@ -75,7 +76,7 @@ func ReadYaml[V storeable](path string) error {
 		switch blueprint := any(item).(type) {
 		case *blueprints.Building:
 			if blueprint.ID == uuid.Nil {
-				blueprint.ID = blueprints.GetBuildingID(blueprint.Name.String())
+				blueprint.ID = game.GetBuildingID(blueprint.Name.String())
 			}
 
 			store.buildings.Put(blueprint)

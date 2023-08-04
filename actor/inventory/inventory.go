@@ -11,6 +11,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	intnats "github.com/0xa1-red/empires-of-avalon/transport/nats"
@@ -171,7 +172,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	sctx, span := traces.Start(pctx, "actor/inventory/start")
 	defer span.End()
 
-	blueprint, err := registry.GetBuilding(blueprints.GetBuildingID(req.Name))
+	blueprint, err := registry.GetBuilding(game.GetBuildingID(req.Name))
 	if err != nil {
 		return &protobuf.StartResponse{
 			Status:    protobuf.Status_Error,
@@ -499,7 +500,7 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 	payload := t.Data.AsMap()
 	buildingName := payload[KeyBuilding].(string)
 
-	building, err := registry.GetBuilding(blueprints.GetBuildingID(buildingName))
+	building, err := registry.GetBuilding(game.GetBuildingID(buildingName))
 	if err != nil {
 		return
 	}

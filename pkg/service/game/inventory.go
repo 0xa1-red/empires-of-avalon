@@ -4,7 +4,6 @@ import (
 	"context"
 
 	gamecluster "github.com/0xa1-red/empires-of-avalon/pkg/cluster"
-	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/google/uuid"
 	"go.opentelemetry.io/otel"
@@ -14,7 +13,7 @@ import (
 )
 
 func Describe(ctx context.Context, userID uuid.UUID) (*protobuf.DescribeInventoryResponse, error) {
-	inventoryID := blueprints.GetInventoryID(userID)
+	inventoryID := GetInventoryID(userID)
 
 	slog.Info("getting inventory grain client", "id", inventoryID.String())
 	inventory := protobuf.GetInventoryGrainClient(gamecluster.GetC(), inventoryID.String())

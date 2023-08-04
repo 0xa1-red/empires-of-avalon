@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -36,7 +37,7 @@ func TestBuildingCallback(t *testing.T) {
 
 	g.updateLimits()
 
-	id := blueprints.GetBuildingID(blueprints.House.String())
+	id := game.GetBuildingID(blueprints.House.String())
 
 	g.buildings[id].Queue = []Building{
 		{

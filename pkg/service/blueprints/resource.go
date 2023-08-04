@@ -23,6 +23,7 @@ type Resource struct {
 	StartingAmount int          `json:"starting_amount" yaml:"starting_amount"`
 	StartingCap    int          `json:"starting_cap" yaml:"starting_cap"`
 	CapFormula     string       `json:"cap_formula" yaml:"cap_formula"`
+	Version        int          `json:"version" yaml:"version"`
 }
 
 func (r *Resource) Encode() ([]byte, error) {
@@ -46,6 +47,10 @@ func (r *Resource) Kind() string {
 
 func (r *Resource) GetID() string {
 	return r.Name.String()
+}
+
+func (r *Resource) GetVersion() int {
+	return r.Version
 }
 
 type ResourceCost struct {

@@ -43,7 +43,7 @@ func (a ActorPID) GetGrainID() uuid.UUID {
 func (a actor) AsMap() map[string]interface{} {
 	return map[string]interface{}{
 		"identity":    a.Identity,
-		"grain_id":    a.PID.GrainID,
+		"grain_id":    a.PID.GrainID.String(),
 		"pid":         a.PID.String(),
 		"last_seen":   a.LastSeen.Format(time.RFC1123),
 		"kind":        a.Kind.String(),

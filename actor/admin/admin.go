@@ -66,9 +66,9 @@ func (g *Grain) add(a actor) {
 
 	switch a.Kind {
 	case protobuf.GrainKind_InventoryGrain:
-		g.registry.Inventories[a.Identity] = a
+		g.registry.Inventories[a.PID.GrainID.String()] = a
 	case protobuf.GrainKind_TimerGrain:
-		g.registry.Timers[a.Identity] = a
+		g.registry.Timers[a.PID.GrainID.String()] = a
 	default:
 		slog.Warn("unknown grain kind", "kind", a.Kind.Number())
 		return
@@ -83,9 +83,9 @@ func (g *Grain) add(a actor) {
 func (g *Grain) remove(a actor) {
 	switch a.Kind {
 	case protobuf.GrainKind_InventoryGrain:
-		delete(g.registry.Inventories, a.Identity)
+		delete(g.registry.Inventories, a.PID.GrainID.String())
 	case protobuf.GrainKind_TimerGrain:
-		delete(g.registry.Timers, a.Identity)
+		delete(g.registry.Timers, a.PID.GrainID.String())
 	default:
 		slog.Warn("unknown grain kind", "kind", a.Kind.Number())
 		return
@@ -100,9 +100,9 @@ func (g *Grain) remove(a actor) {
 func (g *Grain) heartbeat(a actor) {
 	switch a.Kind {
 	case protobuf.GrainKind_InventoryGrain:
-		g.registry.Inventories[a.Identity] = a
+		g.registry.Inventories[a.PID.GrainID.String()] = a
 	case protobuf.GrainKind_TimerGrain:
-		g.registry.Timers[a.Identity] = a
+		g.registry.Timers[a.PID.GrainID.String()] = a
 	default:
 		slog.Warn("unknown grain kind", "kind", a.Kind.Number())
 		return
@@ -166,46 +166,42 @@ func (g *Grain) Start(_ *protobuf.Empty, ctx cluster.GrainContext) (*protobuf.Em
 	g.cleanupTimer = time.NewTicker(30 * time.Second)
 	go func() {
 		for range g.cleanupTimer.C {
-			for _, i := range g.registry.Inventories {
-				if i.LastSeen.Before(time.Now().Add(-1 * time.Minute)) {
-					i.Tolerations += 1
-
-					slog.Warn(
-						"grain has not been reporting for the last minute",
-						"kind", i.Kind.String(),
-						"identity", i.Identity,
-						"last_seen", i.LastSeen.Format(time.RFC1123),
-						"tolerations", i.Tolerations,
-					)
-
-					if i.Tolerations >= 3 {
-						slog.Warn("grain failed to report more than three times",
-							"kind", i.Kind.String(),
-							"identity", i.Identity,
-							"last_seen", i.LastSeen.Format(time.RFC1123),
-							"tolerations", i.Tolerations,
-						)
-					}
-				}
+			for i := range g.registry.Inventories {
+				actor := g.registry.Inventories[i]
+				checkHeartbeat(&actor)
 			}
 
-			for _, i := range g.registry.Timers {
-				if i.LastSeen.Before(time.Now().Add(-1 * time.Minute)) {
-					i.Tolerations += 1
-
-					slog.Warn(
-						"grain has not been reporting for the last minute",
-						"kind", i.Kind.String(),
-						"identity", i.Identity,
-						"last_seen", i.LastSeen.Format(time.RFC1123),
-						"tolerations", i.Tolerations,
-					)
-				}
+			for i := range g.registry.Timers {
+				actor := g.registry.Timers[i]
+				checkHeartbeat(&actor)
 			}
 		}
 	}()
 
 	return nil, nil
+}
+
+func checkHeartbeat(a *actor) {
+	if a.LastSeen.Before(time.Now().Add(-1 * time.Minute)) {
+		a.Tolerations += 1
+
+		slog.Warn(
+			"grain has not been reporting for the last minute",
+			"kind", a.Kind.String(),
+			"identity", a.Identity,
+			"last_seen", a.LastSeen.Format(time.RFC1123),
+			"tolerations", a.Tolerations,
+		)
+
+		if a.Tolerations >= 3 {
+			slog.Warn("grain failed to report more than three times",
+				"kind", a.Kind.String(),
+				"identity", a.Identity,
+				"last_seen", a.LastSeen.Format(time.RFC1123),
+				"tolerations", a.Tolerations,
+			)
+		}
+	}
 }
 
 func (g *Grain) messageCallback(t *protobuf.GrainUpdate) {

@@ -53,7 +53,7 @@ func (g *Grain) Decode(b []byte) error {
 		r.mx = &sync.Mutex{}
 	}
 
-	for id, b := range g.buildings {
+	for blueprintID, b := range g.buildings {
 		b.mx = &sync.Mutex{}
 		if len(b.Completed) == 0 {
 			continue
@@ -61,17 +61,14 @@ func (g *Grain) Decode(b []byte) error {
 
 		slog.Debug("building decode", "name", b.Name, "amount", len(b.Completed))
 
-		buildings := registry.GetBuildings()
-		for _, gen := range buildings[id].Generates {
-			if err := g.startGenerator(gen); err != nil {
-				slog.Error("failed to start generator", err, "name", gen.Name)
-			}
+		blueprint, err := registry.GetBuilding(blueprintID)
+		if err != nil {
+			slog.Error("failed to retrieve blueprint from registry", err, "blueprint_id", blueprintID)
 		}
 
-		for _, tf := range buildings[id].Transforms {
-			if err := g.startTransformer(tf); err != nil {
-				slog.Error("failed to start transformer", err, "name", tf.Name)
-			}
+		for buildingID := range b.Completed {
+			g.startBuildingGenerators(buildingID, blueprint)
+			g.startBuildingTransformers(buildingID, blueprint)
 		}
 	}
 

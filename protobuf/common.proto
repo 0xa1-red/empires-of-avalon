@@ -32,6 +32,13 @@ enum UpdateKind {
     Deregister = 2;
 }
 
+enum BuildingState {
+    BuildingStateUnknown = 0;
+    BuildingStateQueued = 1;
+    BuildingStateInactive = 2;
+    BuildingStateActive = 3;
+}
+
 message StartBuildingRequest {
     string TraceID = 1;
     string Name = 2;
@@ -142,6 +149,8 @@ message GrainUpdate {
     GrainKind GrainKind = 2;
     string Identity = 4;
     google.protobuf.Timestamp Timestamp = 5;
+
+    google.protobuf.Struct Context = 6;
 }
 
 service Inventory {

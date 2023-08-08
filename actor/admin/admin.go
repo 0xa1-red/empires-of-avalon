@@ -10,6 +10,7 @@ import (
 	intnats "github.com/0xa1-red/empires-of-avalon/transport/nats"
 	pactor "github.com/asynkron/protoactor-go/actor"
 	"github.com/asynkron/protoactor-go/cluster"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"go.opentelemetry.io/otel/attribute"
@@ -28,6 +29,8 @@ type actor struct {
 	LastSeen    time.Time
 	Kind        protobuf.GrainKind
 	Tolerations int
+	TimerKind   protobuf.TimerKind
+	Context     map[string]interface{}
 }
 
 type ActorPID struct {
@@ -41,14 +44,17 @@ func (a ActorPID) GetGrainID() uuid.UUID {
 }
 
 func (a actor) AsMap() map[string]interface{} {
-	return map[string]interface{}{
+	m := map[string]interface{}{
 		"identity":    a.Identity,
 		"grain_id":    a.PID.GrainID.String(),
 		"pid":         a.PID.String(),
 		"last_seen":   a.LastSeen.Format(time.RFC1123),
 		"kind":        a.Kind.String(),
 		"tolerations": a.Tolerations,
+		"context":     a.Context,
 	}
+
+	return m
 }
 
 type registry struct {
@@ -81,11 +87,27 @@ func (g *Grain) add(a actor) {
 }
 
 func (g *Grain) remove(a actor) {
+	id := a.PID.GrainID.String()
+
 	switch a.Kind {
 	case protobuf.GrainKind_InventoryGrain:
-		delete(g.registry.Inventories, a.PID.GrainID.String())
+		if _, ok := g.registry.Inventories[id]; !ok {
+			slog.Warn("grain doesn't exist in registry", "kind", a.Kind.String(), "id", id)
+			return
+		}
+
+		delete(g.registry.Inventories, id)
 	case protobuf.GrainKind_TimerGrain:
-		delete(g.registry.Timers, a.PID.GrainID.String())
+		if _, ok := g.registry.Timers[id]; !ok {
+			slog.Warn("grain doesn't exist in registry", "kind", a.Kind.String(), "id", id)
+			return
+		}
+
+		slog.Debug("removing timer grain", "id", id)
+
+		delete(g.registry.Timers, id)
+
+		spew.Dump(g.registry.Timers)
 	default:
 		slog.Warn("unknown grain kind", "kind", a.Kind.Number())
 		return
@@ -210,12 +232,13 @@ func (g *Grain) messageCallback(t *protobuf.GrainUpdate) {
 		slog.Error("failed to get PID from identity", err, "identity", t.Identity)
 	}
 
-	a := actor{
+	a := actor{ // nolint
 		Identity:    t.Identity,
 		LastSeen:    t.Timestamp.AsTime(),
 		Kind:        t.GrainKind,
 		Tolerations: 0,
 		PID:         pid,
+		Context:     t.Context.AsMap(),
 	}
 
 	switch t.UpdateKind {

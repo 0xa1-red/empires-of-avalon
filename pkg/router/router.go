@@ -14,6 +14,7 @@ import (
 	"github.com/go-chi/chi"
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
+	"golang.org/x/exp/slog"
 )
 
 func New() *chi.Mux {
@@ -37,6 +38,8 @@ func E(w http.ResponseWriter, r *http.Request, status int, err error) {
 		StatusText: http.StatusText(status),
 		Error:      err,
 	}
+
+	slog.Error("HTTP error", err)
 
 	render.Status(r, status)
 	render.JSON(w, r, res)

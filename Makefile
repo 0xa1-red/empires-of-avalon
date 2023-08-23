@@ -12,6 +12,7 @@ docker:
 		--tag registry.0x42.in/${user}/${app}:${GAMED_VERSION} .
 
 build:
+	go-assets-builder assets -p assets -o pkg/assets/assets.go
 	go build -ldflags "-X github.com/0xa1-red/empires-of-avalon/version.Tag=`git describe --tags --abbrev=0` -X github.com/0xa1-red/empires-of-avalon/version.Revision=`git rev-parse HEAD` -X 'github.com/0xa1-red/empires-of-avalon/version.BuildTime=${BUILD}'" -o ./target/ ./cmd/...
 
 lint:

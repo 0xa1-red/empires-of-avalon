@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -38,15 +39,13 @@ import (
 )
 
 var (
-	configPath    string
-	blueprintPath string
-	printVersion  bool
+	configPath   string
+	printVersion bool
 )
 
 func main() {
 	flag.BoolVar(&printVersion, "version", false, "print version information")
 	flag.StringVar(&configPath, "config-file", "", "path to config file")
-	flag.StringVar(&blueprintPath, "blueprints", "", "path to blueprint directory")
 	flag.Parse()
 
 	if printVersion {
@@ -70,7 +69,7 @@ func main() {
 
 	initTransport()
 
-	initRegistry(blueprintPath)
+	initRegistry(viper.GetString(config.BlueprintPath))
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
@@ -202,6 +201,9 @@ func restoreSnapshots(kind string) {
 
 func initRegistry(path string) {
 	buildingFilePath := fmt.Sprintf("%s/buildings.yaml", path)
+	absPath, _ := filepath.Abs(buildingFilePath) // nolint:errcheck
+	slog.Debug("intializing registry", "blueprint_path", absPath)
+
 	if err := registry.ReadYaml[*blueprints.Building](buildingFilePath); err != nil {
 		slog.Error("failed to read in building blueprints", err)
 		exit(1)

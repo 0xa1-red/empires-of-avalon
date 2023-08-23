@@ -1,10 +1,11 @@
 ---
+blueprint_path: ../../blueprints
 postgres:
-  user: "root"
-  password: ""
+  user: "postgres"
+  password: "example"
   host: "127.0.0.1"
-  port: "26257"
-  database: "defaultdb"
+  port: "5432"
+  database: "postgres"
   sslmode: "disable"
 cluster:
   name: "avalond-dev"

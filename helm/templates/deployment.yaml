@@ -43,6 +43,9 @@ spec:
             - name: avalond-config
               mountPath: "/etc/avalond"
               readOnly: true
+            - name: avalond-blueprints
+              mountPath: "/opt/blueprints"
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /healthz
@@ -53,3 +56,6 @@ spec:
         - name: avalond-config
           configMap:
             name: avalond-config-file
+        - name: avalond-blueprints
+          configMap:
+            name: avalond-blueprints

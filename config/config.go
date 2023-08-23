@@ -12,6 +12,7 @@ var configs = []struct {
 	env string
 	def interface{}
 }{
+	{BlueprintPath, "BLUEPRINT_PATH", "/etc/avalond/blueprints"},
 	// Postgres
 	{PG_User, "POSTGRES_USER", "postgres"},
 	{PG_Passwd, "POSTGRES_PASSWD", ""},

@@ -1,7 +1,9 @@
 image:
-  repository: alfreddobradi/avalond
+  repository: artifacts.dashboards.0x42.in/docker/avalond
   pullPolicy: Always
 
+serviceAccount:
+  name: avalond
 postgresql:
   enabled: true
 nats:

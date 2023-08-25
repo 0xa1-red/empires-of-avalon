@@ -16,29 +16,35 @@ spec:
       labels:
         app: avalond
         app.kubernetes.io/name: avalond
-        prometheus.io/port: "2223"
-        prometheus.io/scrape: "true"
+      annotations:
+        config.linkerd.io/skip-outbound-ports: "8200"
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/role: "avalond-reader"
+        vault.hashicorp.com/agent-inject-secret-config: "avalond/env"
+        vault.hashicorp.com/agent-inject-template-config: |-
+          {{`{{- with secret "avalond/env" -}}
+            {{ range $k, $v := .Data.data }}
+                export {{ $k }}="{{ $v }}"
+            {{ end }}
+          {{- end -}}`}}
     spec:
+      {{- with .Values.serviceAccount }}
+      serviceAccountName: {{ .name }}
+      {{- end }}
       containers:
         - name: avalond
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ['sh', '-c']
+          args: ['. /vault/secrets/config && avalond']
           ports:
             - containerPort: 3000
-          envFrom:
-            - secretRef:
-                name: avalond-prod-auth0-config
           env:
             - name: AD_POSTGRES_PASSWD
               valueFrom:
                 secretKeyRef:
                   name: avalond-prod-pguser-postgres
                   key: password
-            - name: AD_ETCD_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: avalond-prod-etcd
-                  key: etcd-root-password
           volumeMounts:
             - name: avalond-config
               mountPath: "/etc/avalond"

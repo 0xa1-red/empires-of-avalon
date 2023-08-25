@@ -46,48 +46,48 @@ data:
         build_time: 10s
         initial_amount: 1
         cost:
-        - resource: Wood
+          - resource: Wood
             amount: 20
             permanent: true
-        - resource: Population
+          - resource: Population
             amount: 2
             permanent: false
         generates:
-        - name: Population
+          - name: Population
             amount: 1
             tick_length: 2s
         stores:
-        Population: 6
+          Population: 6
         ---
         kind: Building
         name: Warehouse
         build_time: 10s
         initial_amount: 1
         cost:
-        - resource: Wood
+          - resource: Wood
             amount: 50
             permanent: true
-        - resource: Population
+          - resource: Population
             amount: 5
             permanent: false
         stores:
-        Wood: 100
-        Stone: 100
-        Planks: 40
+          Wood: 100
+          Stone: 100
+          Planks: 40
         ---
         kind: Building
         name: Woodcutter
         build_time: 10s
         workers_maximum: 2
         cost:
-        - resource: Wood
+          - resource: Wood
             amount: 30
             permanent: true
-        - resource: Population
+          - resource: Population
             amount: 3
             permanent: false
         generates:
-        - name: Wood
+          - name: Wood
             amount: 3
             tick_length: 20s
         ---
@@ -96,22 +96,22 @@ data:
         build_time: 10s
         workers_maximum: 2
         cost:
-        - resource: Wood
+          - resource: Wood
             amount: 50
             permanent: true
-        - resource: Population
+          - resource: Population
             amount: 3
             permanent: false
         transforms:
-        - name: Planks
+          - name: Planks
             cost:
-            - resource: Wood
+              - resource: Wood
                 amount: 5
                 temporary: false
             result:
-            - resource: Planks
+              - resource: Planks
                 amount: 1
-            tick_length: 10s
+                tick_length: 10s
     resources.yaml: |
         ---
         kind: Resource
@@ -151,7 +151,7 @@ data:
     CREATE TABLE snapshots (
         kind varchar(255) not null,
         identity uuid not null,
-        data blob not null,
+        data bytea not null,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 

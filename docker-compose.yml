@@ -41,7 +41,7 @@ services:
       - 14269:14269
 
 volumes:
-  roach-data:
+  psql_data:
     driver: local
   etcd_data:
     driver: local

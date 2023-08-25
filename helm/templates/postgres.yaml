@@ -18,7 +18,7 @@ spec:
         - "ReadWriteOnce"
         resources:
           requests:
-            storage: "10Gi"
+            storage: "5Gi"
   patroni:
     dynamicConfiguration:
       postgresql:
@@ -35,7 +35,7 @@ spec:
             - "ReadWriteOnce"
             resources:
               requests:
-                storage: "10Gi"
+                storage: "5Gi"
   users:
     - name: postgres
   imagePullPolicy: "Always"

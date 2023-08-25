@@ -36,12 +36,9 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           command: ['sh', '-c']
-          args: ['. /vault/secrets/config && env && avalond']
+          args: ['. /vault/secrets/config && avalond']
           ports:
             - containerPort: 3000
-          # envFrom:
-          #   - secretRef:
-          #       name: avalond-prod-auth0-config
           env:
             - name: AD_POSTGRES_PASSWD
               valueFrom:

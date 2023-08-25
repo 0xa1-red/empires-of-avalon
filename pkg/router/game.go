@@ -42,7 +42,7 @@ func GameRouter() *Router {
 		AllowCredentials: true,
 		AllowedHeaders:   []string{"Authorization"},
 		MaxAge:           300,
-		Debug:            true,
+		Debug:            false,
 	}))
 
 	r.Group(func(r chi.Router) {

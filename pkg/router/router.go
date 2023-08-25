@@ -19,7 +19,6 @@ import (
 func New() *chi.Mux {
 	s := chi.NewRouter()
 
-	s.Use(middleware.Logger)
 	s.Use(intmw.AvalonLogger)
 	s.Use(middleware.AllowContentType("application/json"))
 	s.Use(middleware.Timeout(60 * time.Second))

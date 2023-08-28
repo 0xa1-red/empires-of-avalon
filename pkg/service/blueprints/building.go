@@ -11,10 +11,10 @@ import (
 type BuildingName string
 
 const (
-	House      BuildingName = "house"
-	Warehouse  BuildingName = "warehouse"
-	Woodcutter BuildingName = "woodcutter"
-	Lumberyard BuildingName = "lumberyard"
+	House      BuildingName = "House"
+	Warehouse  BuildingName = "Warehouse"
+	Woodcutter BuildingName = "Woodcutter"
+	Lumberyard BuildingName = "Lumberyard"
 )
 
 func (r BuildingName) String() string {
@@ -122,4 +122,8 @@ func (b *Building) GetID() string {
 
 func (b *Building) GetVersion() int {
 	return b.Version
+}
+
+func (b *Building) GetName() string {
+	return b.Name.String()
 }

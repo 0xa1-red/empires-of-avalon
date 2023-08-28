@@ -50,6 +50,10 @@ var configs = []struct {
 	{Authenticator_Client_ID, "AUTHENTICATOR_CLIENT_ID", ""},
 	{Authenticator_Client_Secret, "AUTHENTICATOR_CLIENT_SECRET", ""},
 	{Authenticator_Audience, "AUTHENTICATOR_AUDIENCE", ""},
+	// Registry
+	{Registry_Remote_Kind, "REGISTRY_REMOTE_KIND", "etcd"},
+	{Registry_Etcd_Key_Root, "REGISTRY_ETCD_KEY_ROOT", "registry"},
+	{Registry_Etcd_Key_Separator, "REGISTRY_ETCD_KEY_SEPARATOR", "/"},
 }
 
 func Setup(path string) {

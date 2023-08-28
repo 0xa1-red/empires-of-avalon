@@ -61,7 +61,7 @@ func (g *Grain) Decode(b []byte) error {
 
 		slog.Debug("building decode", "name", b.Name, "amount", len(b.Completed))
 
-		blueprint, err := registry.GetBuilding(blueprintID)
+		blueprint, err := registry.GetBuilding(b.Name)
 		if err != nil {
 			slog.Error("failed to retrieve blueprint from registry", err, "blueprint_id", blueprintID)
 		}

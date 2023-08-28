@@ -53,6 +53,10 @@ func (r *Resource) GetVersion() int {
 	return r.Version
 }
 
+func (r *Resource) GetName() string {
+	return r.Name.String()
+}
+
 type ResourceCost struct {
 	Resource  ResourceName
 	Amount    int

@@ -97,9 +97,9 @@ func ReadYaml[V storeable](path string) error {
 	return nil
 }
 
-func GetBuilding(id uuid.UUID) (*blueprints.Building, error) {
+func GetBuilding(name blueprints.BuildingName) (*blueprints.Building, error) {
 	store := getStore()
-	return store.buildings.Get(id)
+	return store.buildings.Get(name)
 }
 
 func GetResource(name string) (*blueprints.Resource, error) {
@@ -107,7 +107,7 @@ func GetResource(name string) (*blueprints.Resource, error) {
 	return store.resources.Get(blueprints.ResourceName(name))
 }
 
-func GetBuildings() map[uuid.UUID]*blueprints.Building {
+func GetBuildings() map[blueprints.BuildingName]*blueprints.Building {
 	store := getStore()
 	store.buildings.mx.Lock()
 	defer store.buildings.mx.Unlock()

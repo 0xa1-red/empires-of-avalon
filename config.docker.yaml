@@ -31,3 +31,5 @@ instrumentation:
   traces:
     endpoint: localhost:4318
     insecure: true
+registry:
+  remote_kind: etcd

@@ -2,10 +2,15 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/0xa1-red/empires-of-avalon/config"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry/remote"
 	"github.com/alecthomas/kong"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 type Context struct {
@@ -18,6 +23,29 @@ type LoadCmd struct {
 
 func (l *LoadCmd) Run(ctx *Context) error {
 	fmt.Println("loading items from " + l.Path)
+
+	buildings, err := readYaml[*blueprints.Building](l.Path)
+	if err != nil {
+		return err
+	}
+
+	for _, building := range buildings {
+		if err := remote.Push(building); err != nil {
+			return err
+		}
+	}
+
+	resources, err := readYaml[*blueprints.Resource](l.Path)
+	if err != nil {
+		return err
+	}
+
+	for _, resource := range resources {
+		if err := remote.Push(resource); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -47,4 +75,43 @@ func main() {
 
 	err := ctx.Run(&Context{Debug: CLI.Debug})
 	ctx.FatalIfErrorf(err)
+}
+
+func readYaml[T *blueprints.Building | *blueprints.Resource](path string) ([]T, error) {
+	filename := ""
+
+	var collection []T
+
+	switch any(collection).(type) {
+	case []*blueprints.Building:
+		filename = "buildings.yaml"
+	case []*blueprints.Resource:
+		filename = "resources.yaml"
+	}
+
+	fp, err := os.OpenFile(filepath.Join(path, filename), os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+	defer fp.Close() // nolint
+
+	decoder := yaml.NewDecoder(fp)
+
+	var decodeError error
+
+	for {
+		var bp T
+		if err := decoder.Decode(&bp); err != nil {
+			decodeError = err
+			break
+		}
+
+		collection = append(collection, bp)
+	}
+
+	if decodeError.Error() != "EOF" {
+		return nil, decodeError
+	}
+
+	return collection, nil
 }

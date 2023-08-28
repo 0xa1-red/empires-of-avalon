@@ -7,6 +7,7 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry/remote"
 	"github.com/alecthomas/kong"
 	"github.com/spf13/viper"
@@ -30,6 +31,7 @@ func (l *LoadCmd) Run(ctx *Context) error {
 	}
 
 	for _, building := range buildings {
+		building.ID = game.GetBuildingID(building.Name.String())
 		if err := remote.Push(building); err != nil {
 			return err
 		}

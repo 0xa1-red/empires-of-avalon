@@ -26,6 +26,7 @@ nats:
   password: ""
 logging:
   level: debug
+  path: "./app.log"
 instrumentation:
   traces:
     endpoint: localhost:4318

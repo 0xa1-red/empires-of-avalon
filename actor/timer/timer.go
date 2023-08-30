@@ -19,6 +19,7 @@ import (
 )
 
 type Timer struct {
+	TimerID     string
 	Kind        protobuf.TimerKind
 	InventoryID string
 	Reply       string
@@ -36,29 +37,6 @@ type Grain struct {
 
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
-
-	if err := actor.SendUpdate(&protobuf.GrainUpdate{
-		UpdateKind: protobuf.UpdateKind_Register,
-		GrainKind:  protobuf.GrainKind_TimerGrain,
-		Timestamp:  timestamppb.Now(),
-		Identity:   g.Identity(),
-	}); err != nil {
-		slog.Warn("failed to send register update to admin actor", err)
-	}
-
-	g.heartbeatTicker = time.NewTicker(30 * time.Second)
-	go func() {
-		for curTime := range g.heartbeatTicker.C {
-			if err := actor.SendUpdate(&protobuf.GrainUpdate{
-				UpdateKind: protobuf.UpdateKind_Heartbeat,
-				GrainKind:  protobuf.GrainKind_TimerGrain,
-				Timestamp:  timestamppb.New(curTime),
-				Identity:   g.ctx.Self().String(),
-			}); err != nil {
-				slog.Warn("failed to send register update to admin actor", err)
-			}
-		}
-	}()
 }
 
 func (g *Grain) Terminate(ctx cluster.GrainContext) {
@@ -70,12 +48,9 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 		}
 	}
 
-	if err := actor.SendUpdate(&protobuf.GrainUpdate{
-		UpdateKind: protobuf.UpdateKind_Deregister,
-		GrainKind:  protobuf.GrainKind_TimerGrain,
-		Timestamp:  timestamppb.Now(),
-		Identity:   g.ctx.Self().String(),
-	}); err != nil {
+	g.heartbeatTicker.Stop()
+
+	if err := g.updateAdmin(protobuf.UpdateKind_Deregister); err != nil {
 		slog.Warn("failed to send deregister update to admin actor", err)
 	}
 }
@@ -103,6 +78,7 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 	}
 
 	g.timer = &Timer{
+		TimerID:     req.TimerID,
 		Kind:        req.Kind,
 		Reply:       req.Reply,
 		Start:       start,
@@ -128,7 +104,21 @@ func (g *Grain) CreateTimer(req *protobuf.TimerRequest, ctx cluster.GrainContext
 	deadline := start
 	deadline = deadline.Add(d)
 
+	if err := g.updateAdmin(protobuf.UpdateKind_Register); err != nil {
+		slog.Warn("failed to send register update to admin actor", err)
+	}
+
+	g.heartbeatTicker = time.NewTicker(30 * time.Second)
+	go func() {
+		for range g.heartbeatTicker.C {
+			if err := g.updateAdmin(protobuf.UpdateKind_Heartbeat); err != nil {
+				slog.Warn("failed to send register update to admin actor", err)
+			}
+		}
+	}()
+
 	return &protobuf.TimerResponse{
+		TimerID:   req.TimerID,
 		Status:    protobuf.Status_OK,
 		Deadline:  timestamppb.New(deadline),
 		Timestamp: timestamppb.Now(),
@@ -156,6 +146,7 @@ func (g *Grain) startBuildingTimer(ctx context.Context) {
 		nextTrigger := g.timer.Start.Add(g.timer.Interval)
 		if nextTrigger.Before(now) {
 			if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+				TimerID:   g.timer.TimerID,
 				Timestamp: timestamppb.New(now),
 				Data:      d.GetStructValue(),
 			}); err != nil {
@@ -174,6 +165,7 @@ func (g *Grain) startBuildingTimer(ctx context.Context) {
 		slog.Debug("timer fired", "kind", g.timer.Kind.String(), "reply", g.timer.Reply, "inventory", g.timer.InventoryID)
 
 		if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+			TimerID:   g.timer.TimerID,
 			Timestamp: timestamppb.New(curTime),
 			Data:      d.GetStructValue(),
 		}); err != nil {
@@ -183,6 +175,13 @@ func (g *Grain) startBuildingTimer(ctx context.Context) {
 		if g.timer.Amount == 0 {
 			t.Stop()
 			g.ctx.Poison(g.ctx.Self())
+
+			if err := conn.Publish("timer-status", &protobuf.TimerStopped{
+				TimerID:   g.timer.TimerID,
+				Timestamp: timestamppb.New(curTime),
+			}); err != nil {
+				slog.Error("failed to send TimerStopped message", err)
+			}
 		}
 	}
 }
@@ -207,6 +206,7 @@ func (g *Grain) startGenerateTimer(ctx context.Context) {
 		nextTrigger := g.timer.Start.Add(g.timer.Interval)
 		if nextTrigger.Before(now) {
 			if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+				TimerID:   g.timer.TimerID,
 				Timestamp: timestamppb.New(now),
 				Data:      d.GetStructValue(),
 			}); err != nil {
@@ -225,6 +225,7 @@ func (g *Grain) startGenerateTimer(ctx context.Context) {
 		slog.Debug("timer fired", "kind", g.timer.Kind.String(), "reply", g.timer.Reply, "inventory", g.timer.InventoryID)
 
 		if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+			TimerID:   g.timer.TimerID,
 			Timestamp: timestamppb.New(curTime),
 			Data:      d.GetStructValue(),
 		}); err != nil {
@@ -253,6 +254,7 @@ func (g *Grain) startTransformTimer(ctx context.Context) {
 		nextTrigger := g.timer.Start.Add(g.timer.Interval)
 		if nextTrigger.Before(now) {
 			if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+				TimerID:   g.timer.TimerID,
 				Timestamp: timestamppb.New(now),
 				Data:      d.GetStructValue(),
 			}); err != nil {
@@ -279,13 +281,14 @@ func (g *Grain) startTransformTimer(ctx context.Context) {
 			slog.Debug("timer fired", "kind", g.timer.Kind.String(), "reply", g.timer.Reply, "inventory", g.timer.InventoryID)
 
 			if err := conn.Publish(g.timer.Reply, &protobuf.TimerFired{
+				TimerID:   g.timer.TimerID,
 				Timestamp: timestamppb.New(curTime),
 				Data:      d.GetStructValue(),
 			}); err != nil {
 				slog.Error("failed to send TimerFired message", err)
 			}
 		} else {
-			slog.Error("timer skipped, because of reserve error", err)
+			slog.Error("timer skipped because of reserve error", err)
 		}
 	}
 }
@@ -362,4 +365,62 @@ func getResourcesFromTimer(ctx context.Context, t *Timer) (map[string]interface{
 	}
 
 	return resources, nil
+}
+
+func (g *Grain) Describe(req *protobuf.DescribeTimerRequest, ctx cluster.GrainContext) (*protobuf.DescribeTimerResponse, error) {
+	timer := make(map[string]interface{})
+
+	timer["timer_id"] = g.timer.TimerID
+	timer["kind"] = g.timer.Kind
+	timer["inventory_id"] = g.timer.InventoryID
+	timer["reply_subject"] = g.timer.Reply
+	timer["amount"] = g.timer.Amount
+	timer["start"] = g.timer.Start.Format(time.RFC1123)
+	timer["interval"] = g.timer.Interval.String()
+	timer["data"] = g.timer.Data
+
+	timeStruct, err := structpb.NewStruct(timer)
+	if err != nil {
+		return &protobuf.DescribeTimerResponse{
+			Timer:     nil,
+			Timestamp: timestamppb.Now(),
+			Status:    protobuf.Status_Error,
+			Error:     err.Error(),
+		}, nil
+	}
+
+	return &protobuf.DescribeTimerResponse{
+		Timer:     timeStruct,
+		Timestamp: timestamppb.Now(),
+		Status:    protobuf.Status_OK,
+		Error:     "",
+	}, nil
+}
+
+func (g *Grain) updateAdmin(kind protobuf.UpdateKind) error {
+	context := map[string]interface{}{
+		"timer_kind": g.timer.Kind.String(),
+	}
+
+	switch g.timer.Kind {
+	case protobuf.TimerKind_Building:
+		context["building"] = g.timer.Data["building"]
+	case protobuf.TimerKind_Generator:
+		context["resource"] = g.timer.Data["resource"]
+	case protobuf.TimerKind_Transformer:
+		context["resource"] = g.timer.Data["result"]
+	}
+
+	contextpb, err := structpb.NewStruct(context)
+	if err != nil {
+		return err
+	}
+
+	return actor.SendUpdate(&protobuf.GrainUpdate{
+		UpdateKind: kind,
+		GrainKind:  protobuf.GrainKind_TimerGrain,
+		Timestamp:  timestamppb.Now(),
+		Identity:   g.ctx.Self().String(),
+		Context:    contextpb,
+	})
 }

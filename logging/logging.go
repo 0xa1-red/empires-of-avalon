@@ -26,7 +26,7 @@ func Setup() error {
 	writers := []io.Writer{os.Stdout}
 
 	if path := viper.GetString(config.Logging_Path); path != "" {
-		fp, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE, 0755)
+		fp, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0755)
 		if err != nil {
 			return err
 		}

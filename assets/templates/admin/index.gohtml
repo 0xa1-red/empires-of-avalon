@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Empires of Avalon - Admin area</title>
+    <style>
+        .main {
+            width: 960px;
+        }
+
+        .section {
+            padding: 0 30px;
+            margin: 30px auto;
+        }
+
+        .section article {
+            margin: 10px auto;
+            width: 100%;
+        }
+
+        .section article .label {
+            font-weight: bold;
+        }
+
+        .section article .context .attribute {
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Empires of Avalon - Admin Dashboard</h1>
+
+    <em>({{ .Timestamp }})</em>
+
+    <div class="main">
+        <h2>Registry</h2>
+        <h3>Inventories</h3>
+        {{ with .Data.registry.inventories }}
+        <div class="section">
+            {{ range . }}
+                <article>
+                    <div class="attribute"><span class="label">Grain ID:</span> <span><a href="/admin/inventory/{{ .grain_id }}" target="_blank">{{ .grain_id }}</a></span></div>
+                    <div class="attribute"><span class="label">Identity:</span> <span>{{ .identity }}</span></div>
+                    <div class="attribute"><span class="label">Last seen:</span> <span>{{ .last_seen }}</span></div>
+                    <div class="attribute"><span class="label">Tolerations:</span> <span>{{ .tolerations }}</span></div>
+                    {{ with .context }}
+                    <div class="context">
+                        {{ range $k, $v := . }}
+                        <div class="attribute"><span class="label">{{ $k }}:</span> <span>{{ $v }}</span></div>
+                        {{ end }}
+                    </div>
+                    {{ end }}
+                </article>
+            {{ end }}
+        </div>
+        {{ else }}
+        <b>No inventories found</b>
+        {{ end }}
+
+        <h3>Timers</h3>
+        {{ with .Data.registry.timers }}
+        <div class="section">
+            {{ range . }}
+                <article>
+                    <div class="attribute"><span class="label">Grain ID:</span> <span><a href="/admin/timer/{{ .grain_id }}" target="_blank">{{ .grain_id }}</a></span></div>
+                    <div class="attribute"><span class="label">Identity:</span> <span>{{ .identity }}</span></div>
+                    <div class="attribute"><span class="label">Last seen:</span> <span>{{ .last_seen }}</span></div>
+                    <div class="attribute"><span class="label">Tolerations:</span> <span>{{ .tolerations }}</span></div>
+                    {{ with .context }}
+                    <div class="context">
+                        <span class="label">Context:</span><br />
+                        {{ range $k, $v := . }}
+                        <div class="attribute"><span class="label">{{ $k }}:</span> <span>{{ $v }}</span></div>
+                        {{ end }}
+                    </div>
+                    {{ end }}
+                </article>
+            {{ end }}
+        </div>
+        {{ else }}
+        <b>No timers found</b>
+        {{ end }}
+    </div>
+    
+</body>
+</html>

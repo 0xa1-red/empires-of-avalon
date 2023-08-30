@@ -9,6 +9,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
+	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -32,16 +33,19 @@ func TestBuildingCallback(t *testing.T) {
 		t.Fatalf("Fail: %v", err)
 	}
 
-	g.buildings = getStartingBuildings()
-	g.resources = getStartingResources()
+	g.buildings = g.getStartingBuildings()
+	g.resources = g.getStartingResources()
 
 	g.updateLimits()
 
-	id := game.GetBuildingID(blueprints.House.String())
+	blueprintID := game.GetBuildingID(blueprints.House.String())
+	buildingID := uuid.New()
 
-	g.buildings[id].Queue = []Building{
-		{
-			State:          "inactive",
+	g.buildings[blueprintID].Queue = map[uuid.UUID]Building{
+		buildingID: {
+			ID:             buildingID,
+			BlueprintID:    blueprintID,
+			State:          protobuf.BuildingState_BuildingStateInactive,
 			WorkersMaximum: 2,
 			WorkersCurrent: 0,
 			Completion:     time.Now().Add(time.Hour),
@@ -54,17 +58,18 @@ func TestBuildingCallback(t *testing.T) {
 			Fields: map[string]*structpb.Value{
 				KeyBuilding:          structpb.NewStringValue(string(blueprints.House)),
 				KeyDisableGenerators: structpb.NewBoolValue(true),
+				KeyId:                structpb.NewStringValue(buildingID.String()),
 			},
 		},
 	}
 
 	g.buildingCallback(&payload)
 
-	if expected, actual := 1, len(g.buildings[id].Completed); expected != actual {
+	if expected, actual := 1, len(g.buildings[blueprintID].Completed); expected != actual {
 		t.Fatalf("FAIL: expected amount to be %d, got %d", expected, actual)
 	}
 
-	if expected, actual := 0, len(g.buildings[id].Queue); expected != actual {
+	if expected, actual := 0, len(g.buildings[blueprintID].Queue); expected != actual {
 		t.Fatalf("FAIL: expected queue to be %d, got %d", expected, actual)
 	}
 }
@@ -76,8 +81,8 @@ func TestReserveRequest(t *testing.T) {
 		t.Fatalf("Fail: %v", err)
 	}
 
-	grain.buildings = getStartingBuildings()
-	grain.resources = getStartingResources()
+	grain.buildings = grain.getStartingBuildings()
+	grain.resources = grain.getStartingResources()
 
 	tests := []struct {
 		label          string

@@ -89,7 +89,7 @@ end
 	return nil
 }
 
-func getStartingResources() map[blueprints.ResourceName]*ResourceRegister {
+func (g *Grain) getStartingResources() map[blueprints.ResourceName]*ResourceRegister {
 	registers := make(map[blueprints.ResourceName]*ResourceRegister)
 
 	for name, resource := range registry.GetResources() {

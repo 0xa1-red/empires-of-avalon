@@ -29,8 +29,12 @@ const (
 	CallbackBuildings    = "buildings"
 	CallbackGenerators   = "generators"
 	CallbackTransformers = "transformers"
+	CallbackTimerStopped = "timer-stopped"
+
+	SubjectTimerStatus = "timer-status"
 
 	KeyBuilding          = "building"
+	KeyId                = "id"
 	KeyDisableGenerators = "disable_generators"
 
 	KeyResource = "resource"
@@ -47,21 +51,29 @@ type ReservedResource struct {
 	Permanent bool
 }
 
-type Building struct {
-	ID                uuid.UUID
-	State             string
-	WorkersMaximum    int
-	WorkersCurrent    int
-	Completion        time.Time
-	ReservedResources []ReservedResource
-}
-
 type BuildingRegister struct {
 	mx *sync.Mutex
 
-	Name      blueprints.BuildingName
-	Completed []Building
-	Queue     []Building
+	BlueprintID uuid.UUID
+	Name        blueprints.BuildingName
+	Completed   map[uuid.UUID]Building
+	Queue       map[uuid.UUID]Building
+}
+
+type TimerRegister struct {
+	mx *sync.Mutex
+
+	Transformers []uuid.UUID
+	Generators   []uuid.UUID
+}
+
+func NewTimerRegister() *TimerRegister {
+	return &TimerRegister{
+		mx: &sync.Mutex{},
+
+		Transformers: make([]uuid.UUID, 0),
+		Generators:   make([]uuid.UUID, 0),
+	}
 }
 
 type Grain struct {
@@ -72,6 +84,7 @@ type Grain struct {
 	subscriptions   map[string]*nats.Subscription
 	callbacks       map[string]*Callback
 	heartbeatTicker *time.Ticker
+	timers          map[uuid.UUID]struct{}
 }
 
 type Callback struct {
@@ -83,6 +96,7 @@ type Callback struct {
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
 	g.subscriptions = make(map[string]*nats.Subscription)
+	g.timers = make(map[uuid.UUID]struct{})
 	g.callbacks = map[string]*Callback{
 		CallbackGenerators: {
 			Name:    CallbackGenerators,
@@ -101,18 +115,40 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		},
 	}
 
-	g.buildings = getStartingBuildings()
-	g.resources = getStartingResources()
+	g.buildings = g.getStartingBuildings()
+	g.resources = g.getStartingResources()
 
 	g.updateLimits()
 
 	for _, cb := range g.callbacks {
 		if err := g.subscribeToCallback(cb); err != nil {
-			slog.Error("failed to subscribe to callback", err, "callback", cb.Name, "subject", cb.Subject)
+			slog.Error("failed to subscribe to callback", err,
+				"callback", cb.Name,
+				"subject", cb.Subject,
+			)
 		}
 	}
 
-	if err := actor.SendUpdate(&protobuf.GrainUpdate{
+	for blueprintID, register := range g.buildings {
+		bp, err := registry.GetBuilding(blueprintID)
+		if err != nil {
+			slog.Error("failed to retrieve building blueprint", err, "id", blueprintID)
+		}
+
+		for buildingID := range register.Completed {
+			g.startBuildingGenerators(buildingID, bp)
+			g.startBuildingTransformers(buildingID, bp)
+		}
+	}
+
+	if err := g.subscribeToTimerStopped(); err != nil {
+		slog.Error("failed to subscribe to callback", err,
+			"callback", CallbackTimerStopped,
+			"subject", SubjectTimerStatus,
+		)
+	}
+
+	if err := actor.SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
 		UpdateKind: protobuf.UpdateKind_Register,
 		GrainKind:  protobuf.GrainKind_InventoryGrain,
 		Timestamp:  timestamppb.Now(),
@@ -124,7 +160,7 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.heartbeatTicker = time.NewTicker(30 * time.Second)
 	go func() {
 		for curTime := range g.heartbeatTicker.C {
-			if err := actor.SendUpdate(&protobuf.GrainUpdate{
+			if err := actor.SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
 				UpdateKind: protobuf.UpdateKind_Heartbeat,
 				GrainKind:  protobuf.GrainKind_InventoryGrain,
 				Timestamp:  timestamppb.New(curTime),
@@ -155,6 +191,8 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 		return
 	}
 
+	g.heartbeatTicker.Stop()
+
 	if n, err := persistence.Get().Persist(g); err != nil {
 		slog.Error("failed to persist grain", err, "kind", g.Kind(), "identity", ctx.Identity())
 	} else {
@@ -164,7 +202,7 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}
 
-func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*protobuf.StartResponse, error) {
+func (g *Grain) StartBuilding(req *protobuf.StartBuildingRequest, ctx cluster.GrainContext) (*protobuf.StartBuildingResponse, error) {
 	carrier := propagation.MapCarrier{}
 	carrier.Set("traceparent", req.TraceID)
 	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
@@ -174,7 +212,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	blueprint, err := registry.GetBuilding(game.GetBuildingID(req.Name))
 	if err != nil {
-		return &protobuf.StartResponse{
+		return &protobuf.StartBuildingResponse{
 			Status:    protobuf.Status_Error,
 			Error:     fmt.Sprintf("Invalid building name: %s", req.Name),
 			Timestamp: timestamppb.Now(),
@@ -183,10 +221,11 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	if _, ok := g.buildings[blueprint.ID]; !ok {
 		g.buildings[blueprint.ID] = &BuildingRegister{
-			mx:        &sync.Mutex{},
-			Name:      blueprint.Name,
-			Completed: make([]Building, 0),
-			Queue:     make([]Building, 0),
+			mx:          &sync.Mutex{},
+			Name:        blueprint.Name,
+			Completed:   make(map[uuid.UUID]Building),
+			Queue:       make(map[uuid.UUID]Building),
+			BlueprintID: blueprint.ID,
 		}
 	}
 
@@ -196,7 +235,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	}
 
 	if queue > 0 {
-		return &protobuf.StartResponse{
+		return &protobuf.StartBuildingResponse{
 			Status:    protobuf.Status_Error,
 			Error:     "All building slots are occupied",
 			Timestamp: timestamppb.Now(),
@@ -212,7 +251,7 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 	}
 
 	if len(insufficient) > 0 {
-		return &protobuf.StartResponse{
+		return &protobuf.StartBuildingResponse{
 			Status:    protobuf.Status_Error,
 			Error:     fmt.Sprintf("Insufficient resources: %s", strings.Join(insufficient, ", ")),
 			Timestamp: timestamppb.Now(),
@@ -224,8 +263,10 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	otel.GetTextMapPropagator().Inject(sctx, &carrier)
 
-	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
+	timerID := uuid.New()
+	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), timerID.String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		TimerID:     timerID.String(),
 		TraceID:     carrier.Get("traceparent"),
 		Kind:        protobuf.TimerKind_Building,
 		Reply:       g.callbacks[CallbackBuildings].Subject,
@@ -233,16 +274,16 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		Duration:    blueprint.BuildTime,
 		Data: &structpb.Struct{
 			Fields: map[string]*structpb.Value{
-				"id":       structpb.NewStringValue(buildingID.String()),
-				"building": structpb.NewStringValue(string(blueprint.Name)),
-				"amount":   structpb.NewNumberValue(1),
+				KeyId:       structpb.NewStringValue(buildingID.String()),
+				KeyBuilding: structpb.NewStringValue(string(blueprint.Name)),
+				KeyAmount:   structpb.NewNumberValue(1),
 			},
 		},
 		Timestamp: timestamppb.Now(),
 	})
 
 	if err != nil {
-		return &protobuf.StartResponse{
+		return &protobuf.StartBuildingResponse{
 			Status:    protobuf.Status_Error,
 			Error:     err.Error(),
 			Timestamp: timestamppb.Now(),
@@ -255,6 +296,8 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 		slog.Time("timestamp", res.Timestamp.AsTime()),
 	)
 
+	g.timers[timerID] = struct{}{}
+
 	reserved := make([]ReservedResource, 0)
 	for _, resource := range blueprint.Cost {
 		reserved = append(reserved, ReservedResource{
@@ -266,16 +309,19 @@ func (g *Grain) Start(req *protobuf.StartRequest, ctx cluster.GrainContext) (*pr
 
 	build := Building{
 		ID:                buildingID,
-		State:             StateQueued,
+		BlueprintID:       blueprint.ID,
+		Name:              blueprint.Name,
+		State:             protobuf.BuildingState_BuildingStateQueued,
 		WorkersMaximum:    blueprint.WorkersMaximum,
 		WorkersCurrent:    0,
 		Completion:        res.Deadline.AsTime(),
 		ReservedResources: reserved,
+		Timers:            NewTimerRegister(),
 	}
 
-	g.buildings[blueprint.ID].Queue = append(g.buildings[blueprint.ID].Queue, build)
+	g.buildings[blueprint.ID].Queue[buildingID] = build
 
-	return &protobuf.StartResponse{
+	return &protobuf.StartBuildingResponse{
 		Status:    protobuf.Status_OK,
 		Timestamp: timestamppb.Now(),
 		Error:     "",
@@ -287,85 +333,37 @@ func (g *Grain) Describe(req *protobuf.DescribeInventoryRequest, ctx cluster.Gra
 	carrier.Set("traceparent", req.TraceID)
 	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
 
-	_, span := traces.Start(pctx, "actor/inventory/describe")
+	nctx, span := traces.Start(pctx, "actor/inventory/describe")
 	defer span.End()
 
-	buildingValues := make(map[string]*structpb.Value)
-	resourceValues := make(map[string]*structpb.Value)
+	buildingValues := g.describeBuildings(nctx)
+	resourceValues := g.describeResources(nctx)
 
-	for _, meta := range g.buildings {
-		completedList := make([]*structpb.Value, 0)
-
-		for _, state := range meta.Completed {
-			finish := ""
-			if !state.Completion.IsZero() {
-				finish = state.Completion.Format(time.RFC3339)
-			}
-
-			b := structpb.NewStructValue(&structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					"state":           structpb.NewStringValue(state.State),
-					"workers_max":     structpb.NewNumberValue(float64(state.WorkersMaximum)),
-					"workers_current": structpb.NewNumberValue(float64(state.WorkersCurrent)),
-					"completion":      structpb.NewStringValue(finish),
-				},
-			})
-
-			completedList = append(completedList, b)
-		}
-
-		queuedList := make([]*structpb.Value, 0)
-
-		for _, state := range meta.Queue {
-			finish := ""
-			if !state.Completion.IsZero() && state.Completion.After(time.Now()) {
-				finish = state.Completion.Format(time.RFC3339)
-			}
-
-			b := structpb.NewStructValue(&structpb.Struct{
-				Fields: map[string]*structpb.Value{
-					"state":      structpb.NewStringValue(state.State),
-					"completion": structpb.NewStringValue(finish),
-				},
-			})
-
-			queuedList = append(queuedList, b)
-		}
-
-		completed := structpb.NewListValue(&structpb.ListValue{
-			Values: completedList,
-		})
-		queued := structpb.NewListValue(&structpb.ListValue{
-			Values: queuedList,
-		})
-
-		buildingValues[meta.Name.String()] = structpb.NewStructValue(&structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				"completed": completed,
-				"queued":    queued,
-			},
-		})
+	fields := map[string]*structpb.Value{
+		"buildings": structpb.NewStructValue(&structpb.Struct{
+			Fields: buildingValues,
+		}),
+		"resources": structpb.NewStructValue(&structpb.Struct{
+			Fields: resourceValues,
+		}),
 	}
 
-	for resource, meta := range g.resources {
-		resourceValues[string(resource)] = structpb.NewStructValue(&structpb.Struct{
-			Fields: map[string]*structpb.Value{
-				"amount":   structpb.NewNumberValue(float64(meta.Amount)),
-				"reserved": structpb.NewNumberValue(float64(meta.Reserved)),
-				"cap":      structpb.NewNumberValue(float64(meta.Cap)),
-			},
-		})
+	if req.GetTimers {
+		t := make(map[string]interface{})
+		for k, v := range g.timers {
+			t[k.String()] = v
+		}
+
+		timers, err := structpb.NewStruct(t)
+		if err == nil {
+			fields["timers"] = structpb.NewStructValue(timers)
+		} else {
+			slog.Warn("failed to collect timers for describe response", err)
+		}
 	}
 
 	inventory := &structpb.Struct{
-		Fields: map[string]*structpb.Value{
-			"buildings": structpb.NewStructValue(&structpb.Struct{
-				Fields: buildingValues,
-			}),
-			"resources": structpb.NewStructValue(&structpb.Struct{
-				Fields: resourceValues,
-			}),
-		},
+		Fields: fields,
 	}
 
 	return &protobuf.DescribeInventoryResponse{
@@ -374,41 +372,49 @@ func (g *Grain) Describe(req *protobuf.DescribeInventoryRequest, ctx cluster.Gra
 	}, nil
 }
 
-func getStartingBuildings() map[uuid.UUID]*BuildingRegister {
+func (g *Grain) getStartingBuildings() map[uuid.UUID]*BuildingRegister {
 	registers := make(map[uuid.UUID]*BuildingRegister)
 
 	now := time.Now()
 
-	for _, blueprint := range registry.GetBuildings() {
-		completed := make([]Building, 0)
+	for blueprintID, blueprint := range registry.GetBuildings() {
+		completed := make(map[uuid.UUID]Building, 0)
 
 		for i := 0; i < blueprint.InitialAmount; i++ {
-			completed = append(completed, Building{
-				ID:                uuid.New(),
-				State:             StateActive,
+			id := uuid.New()
+			completed[id] = Building{
+				ID:                id,
+				BlueprintID:       blueprintID,
+				Name:              blueprint.Name,
+				State:             protobuf.BuildingState_BuildingStateActive,
 				WorkersMaximum:    blueprint.WorkersMaximum,
 				WorkersCurrent:    0,
 				Completion:        now,
 				ReservedResources: make([]ReservedResource, 0),
-			})
+				Timers:            NewTimerRegister(),
+			}
 		}
 
 		registers[blueprint.ID] = &BuildingRegister{
-			mx:        &sync.Mutex{},
-			Name:      blueprint.Name,
-			Completed: completed,
-			Queue:     make([]Building, 0),
+			mx:          &sync.Mutex{},
+			Name:        blueprint.Name,
+			Completed:   completed,
+			Queue:       make(map[uuid.UUID]Building),
+			BlueprintID: blueprintID,
 		}
 	}
 
 	return registers
 }
 
-func (g *Grain) startGenerator(generator blueprints.Generator) error {
+func (g *Grain) startGenerator(generator blueprints.Generator) (uuid.UUID, error) {
 	slog.Debug("starting generator", "name", generator.Name)
 
-	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
+	timerID := uuid.New()
+
+	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), timerID.String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		TimerID:     timerID.String(),
 		TraceID:     "",
 		Kind:        protobuf.TimerKind_Generator,
 		Reply:       g.callbacks[CallbackGenerators].Subject,
@@ -424,7 +430,7 @@ func (g *Grain) startGenerator(generator blueprints.Generator) error {
 	})
 
 	if err != nil {
-		return nil
+		return uuid.Nil, nil
 	}
 
 	slog.Debug("resource timer response",
@@ -433,14 +439,17 @@ func (g *Grain) startGenerator(generator blueprints.Generator) error {
 		slog.Time("timestamp", res.Timestamp.AsTime()),
 	)
 
-	return nil
+	return timerID, nil
 }
 
-func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
+func (g *Grain) startTransformer(transformer blueprints.Transformer) (uuid.UUID, error) {
 	slog.Debug("starting transformer", "name", transformer.Name)
 
-	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), uuid.New().String())
+	timerID := uuid.New()
+
+	timer := protobuf.GetTimerGrainClient(g.ctx.Cluster(), timerID.String())
 	res, err := timer.CreateTimer(&protobuf.TimerRequest{
+		TimerID:     timerID.String(),
 		TraceID:     "",
 		Kind:        protobuf.TimerKind_Transformer,
 		Reply:       g.callbacks[CallbackTransformers].Subject,
@@ -461,7 +470,7 @@ func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
 			slog.Time("timestamp", res.Timestamp.AsTime()),
 		)
 
-		return err
+		return uuid.Nil, err
 	}
 
 	slog.Debug("transform timer response",
@@ -470,7 +479,7 @@ func (g *Grain) startTransformer(transformer blueprints.Transformer) error {
 		slog.Time("timestamp", res.Timestamp.AsTime()),
 	)
 
-	return nil
+	return timerID, nil
 }
 
 func (g *Grain) subscribeToCallback(cb *Callback) error {
@@ -499,28 +508,32 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 
 	payload := t.Data.AsMap()
 	buildingName := payload[KeyBuilding].(string)
+	buildingIDStr := payload[KeyId].(string)
 
-	building, err := registry.GetBuilding(game.GetBuildingID(buildingName))
+	buildingID, err := uuid.Parse(buildingIDStr)
 	if err != nil {
+		slog.Warn("failed to parse building ID", "raw", buildingIDStr)
 		return
 	}
 
-	g.buildings[building.ID].mx.Lock()
-	defer g.buildings[building.ID].mx.Unlock()
-
-	slog.Debug("finished building", "building", building.Name)
-	b := g.buildings[building.ID].Queue[0]
-	b.State = StateActive
-	b.Completion = time.Now()
-	g.buildings[building.ID].Completed = append(g.buildings[building.ID].Completed, b)
-
-	if len(g.buildings[building.ID].Queue) == 1 {
-		g.buildings[building.ID].Queue = make([]Building, 0)
-	} else {
-		g.buildings[building.ID].Queue = g.buildings[building.ID].Queue[1:]
+	blueprint, err := registry.GetBuilding(game.GetBuildingID(buildingName))
+	if err != nil {
+		slog.Warn("failed to retrieve blueprint from registry", "name", buildingName)
+		return
 	}
 
-	for _, cost := range building.Cost {
+	g.buildings[blueprint.ID].mx.Lock()
+	defer g.buildings[blueprint.ID].mx.Unlock()
+
+	slog.Debug("finished building", "building", blueprint.Name)
+	b := g.buildings[blueprint.ID].Queue[buildingID]
+	b.State = protobuf.BuildingState_BuildingStateActive
+	b.Completion = time.Now()
+	g.buildings[blueprint.ID].Completed[buildingID] = b
+
+	delete(g.buildings[blueprint.ID].Queue, buildingID)
+
+	for _, cost := range blueprint.Cost {
 		if !cost.Permanent {
 			g.resources[cost.Resource].Amount += g.resources[cost.Resource].Reserved
 		}
@@ -530,12 +543,12 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 
 	// For testing purposes, we can disable generators if needed
 	if disable, ok := payload[KeyDisableGenerators]; ok && disable.(bool) {
-		slog.Debug("generators are disabled for building", "building", building.Name)
+		slog.Debug("generators are disabled for building", "building", blueprint.Name)
 		return
 	}
 
-	g.startBuildingGenerators(building)
-	g.startBuildingTransformers(building)
+	g.startBuildingGenerators(buildingID, blueprint)
+	g.startBuildingTransformers(buildingID, blueprint)
 }
 
 func (g *Grain) generatorCallback(t *protobuf.TimerFired) {
@@ -588,6 +601,17 @@ func (g *Grain) transformerCallback(t *protobuf.TimerFired) {
 	}
 
 	slog.Info("transformer callback fired", "removed", reserveCache, "added", addCache)
+}
+
+func (g *Grain) timerStoppedCallback(t *protobuf.TimerStopped) {
+	id, err := uuid.Parse(t.TimerID)
+	if err != nil {
+		slog.Error("failed to parse timer ID", err, "timer_id", t.TimerID, "timestamp", t.Timestamp.AsTime().Format(time.RFC1123))
+		return
+	}
+
+	delete(g.timers, id)
+	slog.Debug("removed timer from register", "timer_id", t.TimerID, "timestamp", t.Timestamp.AsTime().Format(time.RFC1123))
 }
 
 func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) (*protobuf.ReserveResponse, error) {
@@ -645,18 +669,119 @@ func (g *Grain) Reserve(req *protobuf.ReserveRequest, ctx cluster.GrainContext) 
 	}, nil
 }
 
-func (g *Grain) startBuildingGenerators(b *blueprints.Building) {
+func (g *Grain) startBuildingGenerators(buildingID uuid.UUID, b *blueprints.Building) {
+	timers := make([]uuid.UUID, 0)
+
 	for _, gen := range b.Generates {
-		if err := g.startGenerator(gen); err != nil {
+		if timerID, err := g.startGenerator(gen); err != nil {
 			slog.Error("failed to start generator", err, "name", gen.Name)
+		} else {
+			timers = append(timers, timerID)
 		}
 	}
+
+	buildingRegister, ok := g.buildings[b.ID]
+	if !ok {
+		slog.Warn("building register not found", "inventory_id", g.Identity(), "blueprint_id", b.ID)
+		return
+	}
+
+	completedBuilding, ok := buildingRegister.Completed[buildingID]
+	if !ok {
+		slog.Warn("building not found", "inventory_id", g.Identity(), "blueprint_id", b.ID, "building_id", buildingID)
+		return
+	}
+
+	completedBuilding.Timers.Generators = timers
 }
 
-func (g *Grain) startBuildingTransformers(b *blueprints.Building) {
+func (g *Grain) startBuildingTransformers(buildingID uuid.UUID, b *blueprints.Building) {
+	timers := make([]uuid.UUID, 0)
+
 	for _, tr := range b.Transforms {
-		if err := g.startTransformer(tr); err != nil {
+		if timerID, err := g.startTransformer(tr); err != nil {
 			slog.Error("failed to start transformer", err, "name", tr.Name)
+		} else {
+			timers = append(timers, timerID)
 		}
 	}
+
+	g.buildings[b.ID].Completed[buildingID].Timers.Transformers = timers
+}
+
+func (g *Grain) subscribeToTimerStopped() error {
+	subject := "timer-status"
+
+	transport, err := intnats.GetConnection()
+	if err != nil {
+		return err
+	}
+
+	sub, err := transport.Subscribe(subject, g.timerStoppedCallback)
+
+	if err != nil {
+		return err
+	}
+
+	slog.Debug("subscribed to callback subject", "subject", subject)
+
+	g.subscriptions[CallbackTimerStopped] = sub
+
+	return nil
+}
+
+func (g *Grain) describeBuildings(ctx context.Context) map[string]*structpb.Value {
+	_, span := traces.Start(ctx, "actor/inventory/describe_buildings")
+	defer span.End()
+
+	buildingValues := make(map[string]*structpb.Value)
+
+	for _, meta := range g.buildings {
+		completedList := make([]*structpb.Value, 0)
+
+		for _, state := range meta.Completed {
+			completedList = append(completedList, state.Describe())
+		}
+
+		queuedList := make([]*structpb.Value, 0)
+
+		for _, state := range meta.Queue {
+			queuedList = append(queuedList, state.Describe())
+		}
+
+		completed := structpb.NewListValue(&structpb.ListValue{
+			Values: completedList,
+		})
+		queued := structpb.NewListValue(&structpb.ListValue{
+			Values: queuedList,
+		})
+
+		buildingValues[meta.Name.String()] = structpb.NewStructValue(&structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"completed": completed,
+				"queued":    queued,
+			},
+		})
+	}
+
+	return buildingValues
+}
+
+func (g *Grain) describeResources(ctx context.Context) map[string]*structpb.Value {
+	_, span := traces.Start(ctx, "actor/inventory/describe_resources")
+	defer span.End()
+
+	resourceValues := make(map[string]*structpb.Value)
+
+	for resource, meta := range g.resources {
+		resourceValues[string(resource)] = structpb.NewStructValue(&structpb.Struct{
+			Fields: map[string]*structpb.Value{
+				"amount":   structpb.NewNumberValue(float64(meta.Amount)),
+				"reserved": structpb.NewNumberValue(float64(meta.Reserved)),
+				"cap":      structpb.NewNumberValue(float64(meta.Cap)),
+			},
+		})
+	}
+
+	return resourceValues
 }

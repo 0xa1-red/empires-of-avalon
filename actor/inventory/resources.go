@@ -22,21 +22,6 @@ type ResourceRegister struct {
 	Reserved   int
 }
 
-// func newResourceRegister(name common.ResourceName, amount int) (*ResourceRegister, error) {
-// 	rr, ok := common.Resources[name]
-// 	if !ok {
-// 		return nil, fmt.Errorf("invalid resource")
-// 	}
-
-// 	return &ResourceRegister{
-// 		mx:         &sync.Mutex{},
-// 		Name:       rr.Name,
-// 		CapFormula: rr.CapFormula,
-// 		Amount:     amount,
-// 		Reserved:   0,
-// 	}, nil
-// }
-
 func (rr *ResourceRegister) UpdateCap(resources map[blueprints.ResourceName]*ResourceRegister, buildings map[uuid.UUID]*BuildingRegister) error {
 	if rr.CapFormula == "" {
 		slog.Debug("no formula defined, skipping cap update", "resource", rr.Name)
@@ -98,7 +83,7 @@ func (g *Grain) getStartingResources() map[blueprints.ResourceName]*ResourceRegi
 			Name:       name,
 			Amount:     resource.StartingAmount,
 			Reserved:   0,
-			Cap:        resource.StartingCap,
+			Cap:        0,
 			CapFormula: resource.CapFormula,
 		}
 	}

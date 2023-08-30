@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
+	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
 
@@ -135,8 +137,13 @@ func getStore() *store {
 
 func Push[T storeable](blueprint T) error {
 	store := getStore()
+
 	switch bp := any(blueprint).(type) {
 	case *blueprints.Building:
+		if bp.ID == uuid.Nil {
+			bp.ID = game.GetBuildingID(bp.Name.String())
+		}
+
 		store.buildings.Put(bp)
 	case *blueprints.Resource:
 		store.resources.Put(bp)

@@ -200,22 +200,32 @@ func restoreSnapshots(kind string) {
 }
 
 func initRegistry(path string) {
-	buildingFilePath := fmt.Sprintf("%s/buildings.yaml", path)
-	absPath, _ := filepath.Abs(buildingFilePath) // nolint:errcheck
+	absPath, _ := filepath.Abs(path) // nolint:errcheck
 	slog.Debug("intializing registry", "blueprint_path", absPath)
 
-	if err := registry.ReadYaml[*blueprints.Building](buildingFilePath); err != nil {
+	if buildings, err := registry.ReadYaml[*blueprints.Building](absPath); err != nil {
 		slog.Error("failed to read in building blueprints", err)
 		exit(1)
+	} else {
+		for _, building := range buildings {
+			if err := registry.Push(building); err != nil {
+				slog.Warn("failed to push building blueprint to local registry", "err", err)
+			}
+		}
+
+		slog.Debug("pushed building blueprints to local registry", "path", filepath.Join(absPath, "buildings.yaml"))
 	}
 
-	slog.Info("registered building blueprints", "path", buildingFilePath)
-
-	resourceFilePath := fmt.Sprintf("%s/resources.yaml", path)
-	if err := registry.ReadYaml[*blueprints.Resource](resourceFilePath); err != nil {
+	if resources, err := registry.ReadYaml[*blueprints.Resource](absPath); err != nil {
 		slog.Error("failed to read in resource blueprints", err)
 		exit(1)
-	}
+	} else {
+		for _, resource := range resources {
+			if err := registry.Push(resource); err != nil {
+				slog.Warn("failed to push resource blueprint to local registry", "err", err)
+			}
+		}
 
-	slog.Info("registered resource blueprints", "path", resourceFilePath)
+		slog.Debug("pushed resource blueprints to local registry", "path", filepath.Join(absPath, "resources.yaml"))
+	}
 }

@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
-	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
-	"github.com/google/uuid"
-	"golang.org/x/exp/slog"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,42 +57,43 @@ func (dwe *DecoderWithError) Decode(v any) error {
 	return dwe.Err
 }
 
-func ReadYaml[V storeable](path string) error {
-	fp, err := os.OpenFile(path, os.O_RDONLY, os.ModePerm)
-	if err != nil {
-		return err
+func ReadYaml[T storeable](path string) ([]T, error) {
+	filename := ""
+
+	var collection []T
+
+	switch any(collection).(type) {
+	case []*blueprints.Building:
+		filename = "buildings.yaml"
+	case []*blueprints.Resource:
+		filename = "resources.yaml"
 	}
-	defer fp.Close()
 
-	decoder := NewDecoderWithError(fp)
+	fp, err := os.OpenFile(filepath.Join(path, filename), os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+	defer fp.Close() // nolint
 
-	store := getStore()
+	decoder := yaml.NewDecoder(fp)
 
-	var item V
+	var decodeError error
 
-	for decoder.Decode(&item) == nil {
-		switch blueprint := any(item).(type) {
-		case *blueprints.Building:
-			if blueprint.ID == uuid.Nil {
-				blueprint.ID = game.GetBuildingID(blueprint.Name.String())
-			}
-
-			store.buildings.Put(blueprint)
-		case *blueprints.Resource:
-			store.resources.Put(blueprint)
-		default:
-			return fmt.Errorf("invalid type")
+	for {
+		var bp T
+		if err := decoder.Decode(&bp); err != nil {
+			decodeError = err
+			break
 		}
 
-		item = nil
+		collection = append(collection, bp)
 	}
 
-	if decoder.Err != nil && decoder.Err.Error() != "EOF" {
-		slog.Error("failed to decode yaml entry", decoder.Err)
-		return decoder.Err
+	if decodeError.Error() != "EOF" {
+		return nil, decodeError
 	}
 
-	return nil
+	return collection, nil
 }
 
 func GetBuilding(name blueprints.BuildingName) (*blueprints.Building, error) {
@@ -132,4 +131,18 @@ func getStore() *store {
 	}
 
 	return registry
+}
+
+func Push[T storeable](blueprint T) error {
+	store := getStore()
+	switch bp := any(blueprint).(type) {
+	case *blueprints.Building:
+		store.buildings.Put(bp)
+	case *blueprints.Resource:
+		store.resources.Put(bp)
+	default:
+		return fmt.Errorf("invalid type %T", bp)
+	}
+
+	return nil
 }

@@ -1,5 +1,5 @@
 ---
-blueprint_path: ../../blueprints
+blueprint_path: /Users/brvy/code/golang/empires-of-avalon/blueprints
 postgres:
   user: "postgres"
   password: "example"

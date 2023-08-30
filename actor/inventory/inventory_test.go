@@ -1,7 +1,7 @@
 package inventory
 
 import (
-	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -10,17 +10,35 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/google/uuid"
+	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func setupRegistry() error {
-	if err := registry.ReadYaml[*blueprints.Building]("./testdata/buildings.yaml"); err != nil {
-		return fmt.Errorf("Fail: failed to read building data: %w", err)
+	absPath, _ := filepath.Abs("./testdata") // nolint:errcheck
+	slog.Debug("intializing registry", "blueprint_path", absPath)
+
+	if buildings, err := registry.ReadYaml[*blueprints.Building](absPath); err != nil {
+		slog.Error("failed to read in building blueprints", err)
+		return err
+	} else {
+		for _, building := range buildings {
+			if err := registry.Push(building); err != nil {
+				slog.Warn("failed to push building blueprint to local registry", "err", err)
+			}
+		}
 	}
 
-	if err := registry.ReadYaml[*blueprints.Resource]("./testdata/resources.yaml"); err != nil {
-		return fmt.Errorf("Fail: failed to read resource data: %w", err)
+	if resources, err := registry.ReadYaml[*blueprints.Resource](absPath); err != nil {
+		slog.Error("failed to read in resource blueprints", err)
+		return err
+	} else {
+		for _, resource := range resources {
+			if err := registry.Push(resource); err != nil {
+				slog.Warn("failed to push resource blueprint to local registry", "err", err)
+			}
+		}
 	}
 
 	return nil

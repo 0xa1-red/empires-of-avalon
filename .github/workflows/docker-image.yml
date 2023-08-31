@@ -12,8 +12,9 @@ on:
 jobs:
 
   lint:
-
-      runs-on: self-hosted
+      runs-on:
+        - self-hosted
+        - ubuntu-latest
       steps:
         -
           name: Debug
@@ -35,7 +36,9 @@ jobs:
             args: --out-format=github-actions
 
   test:
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - ubuntu-latest
     steps:
       - 
         name: Checkout
@@ -53,7 +56,9 @@ jobs:
   build:
     if: ${{ github.event_name == 'release' }}
 
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
+      - ubuntu-latest
     needs:
       - lint
       - test

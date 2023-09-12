@@ -71,6 +71,7 @@ type Inventory interface {
 	Init(ctx cluster.GrainContext)
 	Terminate(ctx cluster.GrainContext)
 	ReceiveDefault(ctx cluster.GrainContext)
+	InitNewInventory(*InitNewInventoryRequest, cluster.GrainContext) (*InitNewInventoryResponse, error)
 	StartBuilding(*StartBuildingRequest, cluster.GrainContext) (*StartBuildingResponse, error)
 	Describe(*DescribeInventoryRequest, cluster.GrainContext) (*DescribeInventoryResponse, error)
 	Restore(*RestoreRequest, cluster.GrainContext) (*RestoreResponse, error)
@@ -83,13 +84,39 @@ type InventoryGrainClient struct {
 	cluster  *cluster.Cluster
 }
 
+// InitNewInventory requests the execution on to the cluster with CallOptions
+func (g *InventoryGrainClient) InitNewInventory(r *InitNewInventoryRequest, opts ...cluster.GrainCallOption) (*InitNewInventoryResponse, error) {
+	bytes, err := proto.Marshal(r)
+	if err != nil {
+		return nil, err
+	}
+	reqMsg := &cluster.GrainRequest{MethodIndex: 0, MessageData: bytes}
+	resp, err := g.cluster.Call(g.Identity, "Inventory", reqMsg, opts...)
+	if err != nil {
+		return nil, err
+	}
+	switch msg := resp.(type) {
+	case *cluster.GrainResponse:
+		result := &InitNewInventoryResponse{}
+		err = proto.Unmarshal(msg.MessageData, result)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	case *cluster.GrainErrorResponse:
+		return nil, errors.New(msg.Err)
+	default:
+		return nil, errors.New("unknown response")
+	}
+}
+
 // StartBuilding requests the execution on to the cluster with CallOptions
 func (g *InventoryGrainClient) StartBuilding(r *StartBuildingRequest, opts ...cluster.GrainCallOption) (*StartBuildingResponse, error) {
 	bytes, err := proto.Marshal(r)
 	if err != nil {
 		return nil, err
 	}
-	reqMsg := &cluster.GrainRequest{MethodIndex: 0, MessageData: bytes}
+	reqMsg := &cluster.GrainRequest{MethodIndex: 1, MessageData: bytes}
 	resp, err := g.cluster.Call(g.Identity, "Inventory", reqMsg, opts...)
 	if err != nil {
 		return nil, err
@@ -115,7 +142,7 @@ func (g *InventoryGrainClient) Describe(r *DescribeInventoryRequest, opts ...clu
 	if err != nil {
 		return nil, err
 	}
-	reqMsg := &cluster.GrainRequest{MethodIndex: 1, MessageData: bytes}
+	reqMsg := &cluster.GrainRequest{MethodIndex: 2, MessageData: bytes}
 	resp, err := g.cluster.Call(g.Identity, "Inventory", reqMsg, opts...)
 	if err != nil {
 		return nil, err
@@ -141,7 +168,7 @@ func (g *InventoryGrainClient) Restore(r *RestoreRequest, opts ...cluster.GrainC
 	if err != nil {
 		return nil, err
 	}
-	reqMsg := &cluster.GrainRequest{MethodIndex: 2, MessageData: bytes}
+	reqMsg := &cluster.GrainRequest{MethodIndex: 3, MessageData: bytes}
 	resp, err := g.cluster.Call(g.Identity, "Inventory", reqMsg, opts...)
 	if err != nil {
 		return nil, err
@@ -167,7 +194,7 @@ func (g *InventoryGrainClient) Reserve(r *ReserveRequest, opts ...cluster.GrainC
 	if err != nil {
 		return nil, err
 	}
-	reqMsg := &cluster.GrainRequest{MethodIndex: 3, MessageData: bytes}
+	reqMsg := &cluster.GrainRequest{MethodIndex: 4, MessageData: bytes}
 	resp, err := g.cluster.Call(g.Identity, "Inventory", reqMsg, opts...)
 	if err != nil {
 		return nil, err
@@ -216,6 +243,30 @@ func (a *InventoryActor) Receive(ctx actor.Context) {
 	case *cluster.GrainRequest:
 		switch msg.MethodIndex {
 		case 0:
+			req := &InitNewInventoryRequest{}
+			err := proto.Unmarshal(msg.MessageData, req)
+			if err != nil {
+				plog.Error("InitNewInventory(InitNewInventoryRequest) proto.Unmarshal failed.", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			r0, err := a.inner.InitNewInventory(req, a.ctx)
+			if err != nil {
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			bytes, err := proto.Marshal(r0)
+			if err != nil {
+				plog.Error("InitNewInventory(InitNewInventoryRequest) proto.Marshal failed", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			resp := &cluster.GrainResponse{MessageData: bytes}
+			ctx.Respond(resp)
+		case 1:
 			req := &StartBuildingRequest{}
 			err := proto.Unmarshal(msg.MessageData, req)
 			if err != nil {
@@ -239,7 +290,7 @@ func (a *InventoryActor) Receive(ctx actor.Context) {
 			}
 			resp := &cluster.GrainResponse{MessageData: bytes}
 			ctx.Respond(resp)
-		case 1:
+		case 2:
 			req := &DescribeInventoryRequest{}
 			err := proto.Unmarshal(msg.MessageData, req)
 			if err != nil {
@@ -263,7 +314,7 @@ func (a *InventoryActor) Receive(ctx actor.Context) {
 			}
 			resp := &cluster.GrainResponse{MessageData: bytes}
 			ctx.Respond(resp)
-		case 2:
+		case 3:
 			req := &RestoreRequest{}
 			err := proto.Unmarshal(msg.MessageData, req)
 			if err != nil {
@@ -287,7 +338,7 @@ func (a *InventoryActor) Receive(ctx actor.Context) {
 			}
 			resp := &cluster.GrainResponse{MessageData: bytes}
 			ctx.Respond(resp)
-		case 3:
+		case 4:
 			req := &ReserveRequest{}
 			err := proto.Unmarshal(msg.MessageData, req)
 			if err != nil {

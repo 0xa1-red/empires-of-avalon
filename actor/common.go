@@ -5,6 +5,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"golang.org/x/exp/slog"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func SendUpdate(update *protobuf.GrainUpdate) error {
@@ -19,4 +20,22 @@ func SendUpdate(update *protobuf.GrainUpdate) error {
 	}
 
 	return nil
+}
+
+func Register(kind protobuf.GrainKind, identity string) error {
+	return SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
+		UpdateKind: protobuf.UpdateKind_Register,
+		GrainKind:  kind,
+		Timestamp:  timestamppb.Now(),
+		Identity:   identity,
+	})
+}
+
+func Heartbeat(kind protobuf.GrainKind, identity string) error {
+	return SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
+		UpdateKind: protobuf.UpdateKind_Heartbeat,
+		GrainKind:  kind,
+		Timestamp:  timestamppb.Now(),
+		Identity:   identity,
+	})
 }

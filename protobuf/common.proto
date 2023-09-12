@@ -39,6 +39,18 @@ enum BuildingState {
     BuildingStateActive = 3;
 }
 
+message InitNewInventoryRequest {
+    string TraceID = 1;
+    string InventoryID = 2;
+    google.protobuf.Timestamp Timestamp = 3;
+}
+
+message InitNewInventoryResponse {
+    Status Status = 1;
+    string Error = 2;
+    google.protobuf.Timestamp Timestamp = 3;
+}
+
 message StartBuildingRequest {
     string TraceID = 1;
     string Name = 2;
@@ -154,6 +166,7 @@ message GrainUpdate {
 }
 
 service Inventory {
+    rpc InitNewInventory (InitNewInventoryRequest) returns (InitNewInventoryResponse);
     rpc StartBuilding (StartBuildingRequest) returns (StartBuildingResponse);
     rpc Describe (DescribeInventoryRequest) returns (DescribeInventoryResponse);
     rpc Restore (RestoreRequest) returns (RestoreResponse);

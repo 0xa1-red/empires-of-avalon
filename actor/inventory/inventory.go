@@ -94,6 +94,8 @@ type Callback struct {
 
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
+	g.buildings = make(map[uuid.UUID]*BuildingRegister)
+	g.resources = make(map[blueprints.ResourceName]*ResourceRegister)
 	g.subscriptions = make(map[string]*nats.Subscription)
 	g.timers = make(map[uuid.UUID]struct{})
 	g.callbacks = map[string]*Callback{
@@ -114,22 +116,34 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		},
 	}
 
-	var startingAssetsError error
-
-	g.buildings, startingAssetsError = g.getStartingBuildings()
-	if startingAssetsError != nil {
-		slog.Error("failed to get starting buildings", startingAssetsError)
-	}
-
-	g.resources, startingAssetsError = g.getStartingResources()
-	if startingAssetsError != nil {
-		slog.Error("failed to get starting resources", startingAssetsError)
-	}
-
-	g.updateLimits()
-
 	g.initCallbacks()
 
+	if err := g.subscribeToTimerStopped(); err != nil {
+		slog.Error("failed to subscribe to callback", err,
+			"callback", CallbackTimerStopped,
+			"subject", SubjectTimerStatus,
+		)
+	}
+
+	if err := actor.Register(protobuf.GrainKind_InventoryGrain, g.ctx.Self().String()); err != nil {
+		slog.Warn("failed to send register update to admin actor", err)
+	}
+
+	g.startHeartbeat()
+}
+
+func (g *Grain) startHeartbeat() {
+	g.heartbeatTicker = time.NewTicker(30 * time.Second)
+	go func() {
+		for range g.heartbeatTicker.C {
+			if err := actor.Heartbeat(protobuf.GrainKind_InventoryGrain, g.ctx.Self().String()); err != nil {
+				slog.Warn("failed to send register update to admin actor", err)
+			}
+		}
+	}()
+}
+
+func (g *Grain) startTimers() {
 	for blueprintID, register := range g.buildings {
 		bp, err := registry.GetBuilding(register.Name)
 		if err != nil {
@@ -141,36 +155,6 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 			g.startBuildingTransformers(buildingID, bp)
 		}
 	}
-
-	if err := g.subscribeToTimerStopped(); err != nil {
-		slog.Error("failed to subscribe to callback", err,
-			"callback", CallbackTimerStopped,
-			"subject", SubjectTimerStatus,
-		)
-	}
-
-	if err := actor.SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
-		UpdateKind: protobuf.UpdateKind_Register,
-		GrainKind:  protobuf.GrainKind_InventoryGrain,
-		Timestamp:  timestamppb.Now(),
-		Identity:   g.ctx.Self().String(),
-	}); err != nil {
-		slog.Warn("failed to send register update to admin actor", err)
-	}
-
-	g.heartbeatTicker = time.NewTicker(30 * time.Second)
-	go func() {
-		for curTime := range g.heartbeatTicker.C {
-			if err := actor.SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
-				UpdateKind: protobuf.UpdateKind_Heartbeat,
-				GrainKind:  protobuf.GrainKind_InventoryGrain,
-				Timestamp:  timestamppb.New(curTime),
-				Identity:   g.ctx.Self().String(),
-			}); err != nil {
-				slog.Warn("failed to send register update to admin actor", err)
-			}
-		}
-	}()
 }
 
 func (g *Grain) initCallbacks() {
@@ -801,4 +785,23 @@ func (g *Grain) describeResources(ctx context.Context) map[string]*structpb.Valu
 	}
 
 	return resourceValues
+}
+
+func (g *Grain) InitNewInventory(res *protobuf.InitNewInventoryRequest, ctx cluster.GrainContext) (*protobuf.InitNewInventoryResponse, error) {
+	var startingAssetsError error
+
+	g.buildings, startingAssetsError = g.getStartingBuildings()
+	if startingAssetsError != nil {
+		slog.Error("failed to get starting buildings", startingAssetsError)
+	}
+
+	g.resources, startingAssetsError = g.getStartingResources()
+	if startingAssetsError != nil {
+		slog.Error("failed to get starting resources", startingAssetsError)
+	}
+
+	g.updateLimits()
+	g.startTimers()
+
+	return nil, nil
 }

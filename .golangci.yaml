@@ -71,7 +71,10 @@ output:
   format: colored-line-number
 
 # All available settings of specific linters.
-linters-settings: {}
+linters-settings:
+  cyclop:
+    max-complexity: 10
+    skip-tests: true
 
 linters:
   # Disable all linters.

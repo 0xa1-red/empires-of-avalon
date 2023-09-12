@@ -4,11 +4,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
+	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry/remote"
 	"github.com/google/uuid"
-	"golang.org/x/exp/slog"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,77 +62,138 @@ func (dwe *DecoderWithError) Decode(v any) error {
 	return dwe.Err
 }
 
-func ReadYaml[V storeable](path string) error {
-	fp, err := os.OpenFile(path, os.O_RDONLY, os.ModePerm)
-	if err != nil {
-		return err
+func ReadYaml[T storeable](path string) ([]T, error) {
+	filename := ""
+
+	var collection []T
+
+	switch any(collection).(type) {
+	case []*blueprints.Building:
+		filename = "buildings.yaml"
+	case []*blueprints.Resource:
+		filename = "resources.yaml"
 	}
-	defer fp.Close()
 
-	decoder := NewDecoderWithError(fp)
+	fp, err := os.OpenFile(filepath.Join(path, filename), os.O_RDONLY, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+	defer fp.Close() // nolint
 
-	store := getStore()
+	decoder := yaml.NewDecoder(fp)
 
-	var item V
+	var decodeError error
 
-	for decoder.Decode(&item) == nil {
-		switch blueprint := any(item).(type) {
-		case *blueprints.Building:
-			if blueprint.ID == uuid.Nil {
-				blueprint.ID = game.GetBuildingID(blueprint.Name.String())
-			}
-
-			store.buildings.Put(blueprint)
-		case *blueprints.Resource:
-			store.resources.Put(blueprint)
-		default:
-			return fmt.Errorf("invalid type")
+	for {
+		var bp T
+		if err := decoder.Decode(&bp); err != nil {
+			decodeError = err
+			break
 		}
 
-		item = nil
+		collection = append(collection, bp)
 	}
 
-	if decoder.Err != nil && decoder.Err.Error() != "EOF" {
-		slog.Error("failed to decode yaml entry", decoder.Err)
-		return decoder.Err
+	if decodeError.Error() != "EOF" {
+		return nil, decodeError
 	}
 
-	return nil
+	return collection, nil
 }
 
-func GetBuilding(id uuid.UUID) (*blueprints.Building, error) {
-	store := getStore()
-	return store.buildings.Get(id)
+func GetBuilding(name blueprints.BuildingName) (*blueprints.Building, error) {
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+
+	return store.buildings.Get(name)
 }
 
 func GetResource(name string) (*blueprints.Resource, error) {
-	store := getStore()
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+
 	return store.resources.Get(blueprints.ResourceName(name))
 }
 
-func GetBuildings() map[uuid.UUID]*blueprints.Building {
-	store := getStore()
+func GetBuildings() (map[blueprints.BuildingName]*blueprints.Building, error) {
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+
 	store.buildings.mx.Lock()
 	defer store.buildings.mx.Unlock()
 
-	return store.buildings.store
+	return store.buildings.store, nil
 }
 
-func GetResources() map[blueprints.ResourceName]*blueprints.Resource {
-	store := getStore()
+func GetResources() (map[blueprints.ResourceName]*blueprints.Resource, error) {
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+
 	store.resources.mx.Lock()
 	defer store.resources.mx.Unlock()
 
-	return store.resources.store
+	return store.resources.store, nil
 }
 
-func getStore() *store {
+func getStore() (*store, error) {
 	if registry == nil {
 		registry = &store{
 			buildings: newBuildingStore(),
 			resources: newResourceStore(),
 		}
+
+		if viper.GetString(config.Registry_Remote_Kind) != "memory" {
+			bps, err := remote.List()
+			if err != nil {
+				return nil, err
+			}
+
+			for _, building := range bps["building"] {
+				b := building.(*blueprints.Building)
+				registry.buildings.Put(b)
+			}
+
+			for _, resource := range bps["resource"] {
+				r := resource.(*blueprints.Resource)
+				registry.resources.Put(r)
+			}
+		}
 	}
 
-	return registry
+	return registry, nil
+}
+
+func Push[T storeable](blueprint T) error {
+	store, err := getStore()
+	if err != nil {
+		return err
+	}
+
+	switch bp := any(blueprint).(type) {
+	case *blueprints.Building:
+		if bp.ID == uuid.Nil {
+			bp.ID = game.GetBuildingID(bp.Name.String())
+		}
+
+		store.buildings.Put(bp)
+	case *blueprints.Resource:
+		store.resources.Put(bp)
+	default:
+		return fmt.Errorf("invalid type %T", bp)
+	}
+
+	return nil
+}
+
+func Init() error {
+	_, err := getStore()
+	return err
 }

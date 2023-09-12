@@ -1,26 +1,48 @@
 package inventory
 
 import (
-	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/google/uuid"
+	"github.com/spf13/viper"
+	"github.com/stretchr/testify/assert"
+	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func setupRegistry() error {
-	if err := registry.ReadYaml[*blueprints.Building]("./testdata/buildings.yaml"); err != nil {
-		return fmt.Errorf("Fail: failed to read building data: %w", err)
+	viper.Set(config.Registry_Remote_Kind, "memory")
+	absPath, _ := filepath.Abs("./testdata") // nolint:errcheck
+	slog.Debug("intializing registry", "blueprint_path", absPath)
+
+	if buildings, err := registry.ReadYaml[*blueprints.Building](absPath); err != nil {
+		slog.Error("failed to read in building blueprints", err)
+		return err
+	} else {
+		for _, building := range buildings {
+			if err := registry.Push(building); err != nil {
+				slog.Warn("failed to push building blueprint to local registry", "err", err)
+			}
+		}
 	}
 
-	if err := registry.ReadYaml[*blueprints.Resource]("./testdata/resources.yaml"); err != nil {
-		return fmt.Errorf("Fail: failed to read resource data: %w", err)
+	if resources, err := registry.ReadYaml[*blueprints.Resource](absPath); err != nil {
+		slog.Error("failed to read in resource blueprints", err)
+		return err
+	} else {
+		for _, resource := range resources {
+			if err := registry.Push(resource); err != nil {
+				slog.Warn("failed to push resource blueprint to local registry", "err", err)
+			}
+		}
 	}
 
 	return nil
@@ -33,8 +55,13 @@ func TestBuildingCallback(t *testing.T) {
 		t.Fatalf("Fail: %v", err)
 	}
 
-	g.buildings = g.getStartingBuildings()
-	g.resources = g.getStartingResources()
+	var assetError error
+
+	g.buildings, assetError = g.getStartingBuildings()
+	assert.NoError(t, assetError)
+
+	g.resources, assetError = g.getStartingResources()
+	assert.NoError(t, assetError)
 
 	g.updateLimits()
 
@@ -65,13 +92,8 @@ func TestBuildingCallback(t *testing.T) {
 
 	g.buildingCallback(&payload)
 
-	if expected, actual := 1, len(g.buildings[blueprintID].Completed); expected != actual {
-		t.Fatalf("FAIL: expected amount to be %d, got %d", expected, actual)
-	}
-
-	if expected, actual := 0, len(g.buildings[blueprintID].Queue); expected != actual {
-		t.Fatalf("FAIL: expected queue to be %d, got %d", expected, actual)
-	}
+	assert.Equal(t, 1, len(g.buildings[blueprintID].Completed))
+	assert.Equal(t, 0, len(g.buildings[blueprintID].Queue))
 }
 
 func TestReserveRequest(t *testing.T) {
@@ -81,8 +103,13 @@ func TestReserveRequest(t *testing.T) {
 		t.Fatalf("Fail: %v", err)
 	}
 
-	grain.buildings = grain.getStartingBuildings()
-	grain.resources = grain.getStartingResources()
+	var assetError error
+
+	grain.buildings, assetError = grain.getStartingBuildings()
+	assert.NoError(t, assetError)
+
+	grain.resources, assetError = grain.getStartingResources()
+	assert.NoError(t, assetError)
 
 	tests := []struct {
 		label          string
@@ -124,16 +151,12 @@ func TestReserveRequest(t *testing.T) {
 			}
 
 			res, _ := grain.Reserve(&msg, nil)
-			if res == nil {
-				t.Fatalf("Fail: expected response, got nil")
-			}
-			if actual, expected := res.Status, tt.expectedStatus; actual != expected {
-				t.Fatalf("FAIL: expected status to be %s, got %s", expected, actual)
-			}
+			assert.NotNil(t, res)
+
+			assert.Equal(t, tt.expectedStatus, res.Status)
+
 			if tt.expectedStatus == protobuf.Status_Error {
-				if actual, expected := res.Error, tt.expectedError.Error(); actual != expected {
-					t.Fatalf("FAIL: expected error be %s, got %s", expected, actual)
-				}
+				assert.Equal(t, tt.expectedError.Error(), res.Error)
 			}
 		}
 

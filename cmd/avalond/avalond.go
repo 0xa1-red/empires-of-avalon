@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -21,7 +20,6 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	gamecluster "github.com/0xa1-red/empires-of-avalon/pkg/cluster"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/auth"
-	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/0xa1-red/empires-of-avalon/transport/nats"
@@ -69,7 +67,10 @@ func main() {
 
 	initTransport()
 
-	initRegistry(viper.GetString(config.BlueprintPath))
+	if err := initRegistry(); err != nil {
+		slog.Error("failed to initialize registry", err)
+		exit(1)
+	}
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt)
@@ -199,23 +200,6 @@ func restoreSnapshots(kind string) {
 	}
 }
 
-func initRegistry(path string) {
-	buildingFilePath := fmt.Sprintf("%s/buildings.yaml", path)
-	absPath, _ := filepath.Abs(buildingFilePath) // nolint:errcheck
-	slog.Debug("intializing registry", "blueprint_path", absPath)
-
-	if err := registry.ReadYaml[*blueprints.Building](buildingFilePath); err != nil {
-		slog.Error("failed to read in building blueprints", err)
-		exit(1)
-	}
-
-	slog.Info("registered building blueprints", "path", buildingFilePath)
-
-	resourceFilePath := fmt.Sprintf("%s/resources.yaml", path)
-	if err := registry.ReadYaml[*blueprints.Resource](resourceFilePath); err != nil {
-		slog.Error("failed to read in resource blueprints", err)
-		exit(1)
-	}
-
-	slog.Info("registered resource blueprints", "path", resourceFilePath)
+func initRegistry() error {
+	return registry.Init()
 }

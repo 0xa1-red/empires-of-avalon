@@ -11,6 +11,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/pkg/middleware"
 	"github.com/0xa1-red/empires-of-avalon/pkg/model"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/auth"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -112,9 +113,7 @@ func build(w http.ResponseWriter, r *http.Request) {
 
 	amt := game.GetBuildingAmount(buildRequest)
 
-	buildingID := game.GetBuildingID(building)
-
-	b, err := registry.GetBuilding(buildingID)
+	b, err := registry.GetBuilding(blueprints.BuildingName(building))
 	if err != nil {
 		span.RecordError(err)
 		slog.Error("failed to start building", err,

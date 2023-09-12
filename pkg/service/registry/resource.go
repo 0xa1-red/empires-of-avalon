@@ -25,7 +25,7 @@ func (s *ResourceStore) Put(item *blueprints.Resource) {
 	s.mx.Lock()
 	defer s.mx.Unlock()
 
-	slog.Debug("registering building blueprint", "name", item.Name.String())
+	slog.Debug("registering resource blueprint", "name", item.Name.String())
 
 	s.store[item.Name] = item
 }

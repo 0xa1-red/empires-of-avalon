@@ -11,6 +11,7 @@ type Blueprint interface {
 	Kind() string
 	GetID() string
 	GetVersion() int
+	GetName() string
 }
 
 var _ Blueprint = (*Building)(nil)

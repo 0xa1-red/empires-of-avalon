@@ -11,7 +11,6 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
-	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	intnats "github.com/0xa1-red/empires-of-avalon/transport/nats"
@@ -115,22 +114,24 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		},
 	}
 
-	g.buildings = g.getStartingBuildings()
-	g.resources = g.getStartingResources()
+	var startingAssetsError error
+
+	g.buildings, startingAssetsError = g.getStartingBuildings()
+	if startingAssetsError != nil {
+		slog.Error("failed to get starting buildings", startingAssetsError)
+	}
+
+	g.resources, startingAssetsError = g.getStartingResources()
+	if startingAssetsError != nil {
+		slog.Error("failed to get starting resources", startingAssetsError)
+	}
 
 	g.updateLimits()
 
-	for _, cb := range g.callbacks {
-		if err := g.subscribeToCallback(cb); err != nil {
-			slog.Error("failed to subscribe to callback", err,
-				"callback", cb.Name,
-				"subject", cb.Subject,
-			)
-		}
-	}
+	g.initCallbacks()
 
 	for blueprintID, register := range g.buildings {
-		bp, err := registry.GetBuilding(blueprintID)
+		bp, err := registry.GetBuilding(register.Name)
 		if err != nil {
 			slog.Error("failed to retrieve building blueprint", err, "id", blueprintID)
 		}
@@ -172,6 +173,17 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 	}()
 }
 
+func (g *Grain) initCallbacks() {
+	for _, cb := range g.callbacks {
+		if err := g.subscribeToCallback(cb); err != nil {
+			slog.Error("failed to subscribe to callback", err,
+				"callback", cb.Name,
+				"subject", cb.Subject,
+			)
+		}
+	}
+}
+
 func (g *Grain) updateLimits() {
 	for _, resource := range g.resources {
 		if err := resource.UpdateCap(g.resources, g.buildings); err != nil {
@@ -210,7 +222,7 @@ func (g *Grain) StartBuilding(req *protobuf.StartBuildingRequest, ctx cluster.Gr
 	sctx, span := traces.Start(pctx, "actor/inventory/start")
 	defer span.End()
 
-	blueprint, err := registry.GetBuilding(game.GetBuildingID(req.Name))
+	blueprint, err := registry.GetBuilding(blueprints.BuildingName(req.Name))
 	if err != nil {
 		return &protobuf.StartBuildingResponse{
 			Status:    protobuf.Status_Error,
@@ -372,19 +384,24 @@ func (g *Grain) Describe(req *protobuf.DescribeInventoryRequest, ctx cluster.Gra
 	}, nil
 }
 
-func (g *Grain) getStartingBuildings() map[uuid.UUID]*BuildingRegister {
+func (g *Grain) getStartingBuildings() (map[uuid.UUID]*BuildingRegister, error) {
 	registers := make(map[uuid.UUID]*BuildingRegister)
 
 	now := time.Now()
 
-	for blueprintID, blueprint := range registry.GetBuildings() {
+	buildings, err := registry.GetBuildings()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, blueprint := range buildings {
 		completed := make(map[uuid.UUID]Building, 0)
 
 		for i := 0; i < blueprint.InitialAmount; i++ {
 			id := uuid.New()
 			completed[id] = Building{
 				ID:                id,
-				BlueprintID:       blueprintID,
+				BlueprintID:       blueprint.ID,
 				Name:              blueprint.Name,
 				State:             protobuf.BuildingState_BuildingStateActive,
 				WorkersMaximum:    blueprint.WorkersMaximum,
@@ -400,11 +417,11 @@ func (g *Grain) getStartingBuildings() map[uuid.UUID]*BuildingRegister {
 			Name:        blueprint.Name,
 			Completed:   completed,
 			Queue:       make(map[uuid.UUID]Building),
-			BlueprintID: blueprintID,
+			BlueprintID: blueprint.ID,
 		}
 	}
 
-	return registers
+	return registers, nil
 }
 
 func (g *Grain) startGenerator(generator blueprints.Generator) (uuid.UUID, error) {
@@ -507,7 +524,7 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 	defer g.updateLimits()
 
 	payload := t.Data.AsMap()
-	buildingName := payload[KeyBuilding].(string)
+	buildingName := blueprints.BuildingName(payload[KeyBuilding].(string))
 	buildingIDStr := payload[KeyId].(string)
 
 	buildingID, err := uuid.Parse(buildingIDStr)
@@ -516,7 +533,7 @@ func (g *Grain) buildingCallback(t *protobuf.TimerFired) {
 		return
 	}
 
-	blueprint, err := registry.GetBuilding(game.GetBuildingID(buildingName))
+	blueprint, err := registry.GetBuilding(buildingName)
 	if err != nil {
 		slog.Warn("failed to retrieve blueprint from registry", "name", buildingName)
 		return

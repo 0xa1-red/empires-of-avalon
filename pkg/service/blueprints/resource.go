@@ -21,7 +21,6 @@ const (
 type Resource struct {
 	Name           ResourceName `json:"name" yaml:"name"`
 	StartingAmount int          `json:"starting_amount" yaml:"starting_amount"`
-	StartingCap    int          `json:"starting_cap" yaml:"starting_cap"`
 	CapFormula     string       `json:"cap_formula" yaml:"cap_formula"`
 	Version        int          `json:"version" yaml:"version"`
 }
@@ -51,6 +50,10 @@ func (r *Resource) GetID() string {
 
 func (r *Resource) GetVersion() int {
 	return r.Version
+}
+
+func (r *Resource) GetName() string {
+	return r.Name.String()
 }
 
 type ResourceCost struct {

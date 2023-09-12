@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 
 	"github.com/0xa1-red/empires-of-avalon/config"
@@ -10,6 +12,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry/remote"
 	"github.com/alecthomas/kong"
 	"github.com/spf13/viper"
+	"gopkg.in/yaml.v3"
 )
 
 type Context struct {
@@ -56,6 +59,36 @@ type ListCmd struct {
 func (l *ListCmd) Run(ctx *Context) error {
 	fmt.Println(viper.GetString(config.PG_Host))
 	fmt.Println("Listing items in " + l.Format + " format")
+
+	list, err := remote.List()
+	if err != nil {
+		return err
+	}
+
+	switch l.Format {
+	default:
+		fallthrough
+	case "json":
+		buf := bytes.NewBufferString("")
+		encoder := json.NewEncoder(buf)
+		encoder.SetIndent("", "  ")
+
+		if err := encoder.Encode(list); err != nil {
+			return err
+		}
+
+		fmt.Print(buf.String())
+	case "yaml":
+		buf := bytes.NewBufferString("")
+		encoder := yaml.NewEncoder(buf)
+		encoder.SetIndent(2)
+
+		if err := encoder.Encode(list); err != nil {
+			return err
+		}
+
+		fmt.Print(buf.String())
+	}
 
 	return nil
 }

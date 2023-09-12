@@ -114,19 +114,21 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		},
 	}
 
-	g.buildings = g.getStartingBuildings()
-	g.resources = g.getStartingResources()
+	var startingAssetsError error
+
+	g.buildings, startingAssetsError = g.getStartingBuildings()
+	if startingAssetsError != nil {
+		slog.Error("failed to get starting buildings", startingAssetsError)
+	}
+
+	g.resources, startingAssetsError = g.getStartingResources()
+	if startingAssetsError != nil {
+		slog.Error("failed to get starting resources", startingAssetsError)
+	}
 
 	g.updateLimits()
 
-	for _, cb := range g.callbacks {
-		if err := g.subscribeToCallback(cb); err != nil {
-			slog.Error("failed to subscribe to callback", err,
-				"callback", cb.Name,
-				"subject", cb.Subject,
-			)
-		}
-	}
+	g.initCallbacks()
 
 	for blueprintID, register := range g.buildings {
 		bp, err := registry.GetBuilding(register.Name)
@@ -169,6 +171,17 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 			}
 		}
 	}()
+}
+
+func (g *Grain) initCallbacks() {
+	for _, cb := range g.callbacks {
+		if err := g.subscribeToCallback(cb); err != nil {
+			slog.Error("failed to subscribe to callback", err,
+				"callback", cb.Name,
+				"subject", cb.Subject,
+			)
+		}
+	}
 }
 
 func (g *Grain) updateLimits() {
@@ -371,12 +384,17 @@ func (g *Grain) Describe(req *protobuf.DescribeInventoryRequest, ctx cluster.Gra
 	}, nil
 }
 
-func (g *Grain) getStartingBuildings() map[uuid.UUID]*BuildingRegister {
+func (g *Grain) getStartingBuildings() (map[uuid.UUID]*BuildingRegister, error) {
 	registers := make(map[uuid.UUID]*BuildingRegister)
 
 	now := time.Now()
 
-	for _, blueprint := range registry.GetBuildings() {
+	buildings, err := registry.GetBuildings()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, blueprint := range buildings {
 		completed := make(map[uuid.UUID]Building, 0)
 
 		for i := 0; i < blueprint.InitialAmount; i++ {
@@ -403,7 +421,7 @@ func (g *Grain) getStartingBuildings() map[uuid.UUID]*BuildingRegister {
 		}
 	}
 
-	return registers
+	return registers, nil
 }
 
 func (g *Grain) startGenerator(generator blueprints.Generator) (uuid.UUID, error) {

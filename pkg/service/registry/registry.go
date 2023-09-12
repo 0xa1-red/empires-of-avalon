@@ -8,6 +8,7 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry/remote"
 	"github.com/google/uuid"
 	"gopkg.in/yaml.v3"
 )
@@ -99,44 +100,78 @@ func ReadYaml[T storeable](path string) ([]T, error) {
 }
 
 func GetBuilding(name blueprints.BuildingName) (*blueprints.Building, error) {
-	store := getStore()
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+
 	return store.buildings.Get(name)
 }
 
 func GetResource(name string) (*blueprints.Resource, error) {
-	store := getStore()
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+
 	return store.resources.Get(blueprints.ResourceName(name))
 }
 
-func GetBuildings() map[blueprints.BuildingName]*blueprints.Building {
-	store := getStore()
+func GetBuildings() (map[blueprints.BuildingName]*blueprints.Building, error) {
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+
 	store.buildings.mx.Lock()
 	defer store.buildings.mx.Unlock()
 
-	return store.buildings.store
+	return store.buildings.store, nil
 }
 
-func GetResources() map[blueprints.ResourceName]*blueprints.Resource {
-	store := getStore()
+func GetResources() (map[blueprints.ResourceName]*blueprints.Resource, error) {
+	store, err := getStore()
+	if err != nil {
+		return nil, err
+	}
+
 	store.resources.mx.Lock()
 	defer store.resources.mx.Unlock()
 
-	return store.resources.store
+	return store.resources.store, nil
 }
 
-func getStore() *store {
+func getStore() (*store, error) {
 	if registry == nil {
 		registry = &store{
 			buildings: newBuildingStore(),
 			resources: newResourceStore(),
 		}
+
+		bps, err := remote.List()
+		if err != nil {
+			return nil, err
+		}
+
+		for _, building := range bps["building"] {
+			b := building.(*blueprints.Building)
+			registry.buildings.Put(b)
+		}
+
+		for _, resource := range bps["resource"] {
+			r := resource.(*blueprints.Resource)
+			registry.resources.Put(r)
+		}
 	}
 
-	return registry
+	return registry, nil
 }
 
 func Push[T storeable](blueprint T) error {
-	store := getStore()
+	store, err := getStore()
+	if err != nil {
+		return err
+	}
 
 	switch bp := any(blueprint).(type) {
 	case *blueprints.Building:
@@ -152,4 +187,9 @@ func Push[T storeable](blueprint T) error {
 	}
 
 	return nil
+}
+
+func Init() error {
+	_, err := getStore()
+	return err
 }

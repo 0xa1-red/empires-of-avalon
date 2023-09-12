@@ -13,8 +13,13 @@ func TestUpdateCap(t *testing.T) {
 	}
 
 	g := &Grain{}
-	g.buildings = g.getStartingBuildings()
-	g.resources = g.getStartingResources()
+	var assetError error
+
+	g.buildings, assetError = g.getStartingBuildings()
+	assert.NoError(t, assetError)
+
+	g.resources, assetError = g.getStartingResources()
+	assert.NoError(t, assetError)
 
 	resource := g.resources[blueprints.Wood]
 

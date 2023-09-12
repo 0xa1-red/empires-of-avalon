@@ -74,10 +74,15 @@ end
 	return nil
 }
 
-func (g *Grain) getStartingResources() map[blueprints.ResourceName]*ResourceRegister {
+func (g *Grain) getStartingResources() (map[blueprints.ResourceName]*ResourceRegister, error) {
 	registers := make(map[blueprints.ResourceName]*ResourceRegister)
 
-	for name, resource := range registry.GetResources() {
+	resources, err := registry.GetResources()
+	if err != nil {
+		return nil, err
+	}
+
+	for name, resource := range resources {
 		registers[name] = &ResourceRegister{
 			mx:         &sync.Mutex{},
 			Name:       name,
@@ -88,7 +93,7 @@ func (g *Grain) getStartingResources() map[blueprints.ResourceName]*ResourceRegi
 		}
 	}
 
-	return registers
+	return registers, nil
 }
 
 func (rr *ResourceRegister) Update(amount int) {

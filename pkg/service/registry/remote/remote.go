@@ -11,16 +11,20 @@ import (
 
 type backend interface {
 	Push(bp blueprints.Blueprint) error
-	List() (map[string]blueprints.Blueprint, error)
+	List() (map[string]map[string]blueprints.Blueprint, error)
 	Get(kind, key string) (blueprints.Blueprint, error)
 }
+
+const (
+	KindEtcd string = "etcd"
+)
 
 var connection backend
 
 func getConnection() (backend, error) {
 	if connection == nil {
 		switch viper.GetString(config.Registry_Remote_Kind) {
-		case "etcd":
+		case KindEtcd:
 			c, err := etcd.New()
 			if err != nil {
 				return nil, err
@@ -44,7 +48,7 @@ func Push(bp blueprints.Blueprint) error {
 	return c.Push(bp)
 }
 
-func List() (map[string]blueprints.Blueprint, error) {
+func List() (map[string]map[string]blueprints.Blueprint, error) {
 	c, err := getConnection()
 	if err != nil {
 		return nil, err

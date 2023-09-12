@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/0xa1-red/empires-of-avalon/config"
@@ -66,8 +67,52 @@ func (s *Store) Push(blueprint blueprints.Blueprint) error {
 	return nil
 }
 
-func (s *Store) List() (map[string]blueprints.Blueprint, error) {
-	return nil, nil
+func (s *Store) List() (map[string]map[string]blueprints.Blueprint, error) {
+	slog.Debug("listing blueprints up blueprint", "key", "/registry/*")
+
+	resp, err := s.Client.Get(context.Background(), "registry", clientv3.WithPrefix())
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]map[string]blueprints.Blueprint)
+
+	if resp.Count == 0 {
+		return result, nil
+	}
+
+	for _, kv := range resp.Kvs {
+		key := strings.Split(string(kv.Key), "/")
+
+		var (
+			blueprint   blueprints.Blueprint
+			decodeError error
+		)
+
+		kind := key[1]
+
+		switch kind {
+		case "building":
+			blueprint, decodeError = decode[*blueprints.Building](kv.Value)
+		case "resource":
+			blueprint, decodeError = decode[*blueprints.Resource](kv.Value)
+		default:
+			continue
+		}
+
+		if decodeError != nil {
+			slog.Warn("failed to decode blueprint", "key", kv.Key)
+			break
+		}
+
+		if _, ok := result[kind]; !ok {
+			result[kind] = make(map[string]blueprints.Blueprint)
+		}
+
+		result[kind][blueprint.GetName()] = blueprint
+	}
+
+	return result, nil
 }
 
 func (s *Store) Get(kind, name string) (blueprints.Blueprint, error) {
@@ -75,7 +120,7 @@ func (s *Store) Get(kind, name string) (blueprints.Blueprint, error) {
 
 	slog.Debug("looking up blueprint", "kind", kind, "name", name, "key", key)
 
-	resp, err := s.Client.Get(context.Background(), namespace(kind, name))
+	resp, err := s.Client.Get(context.Background(), key)
 	if err != nil {
 		return nil, err
 	}
@@ -101,4 +146,16 @@ func (s *Store) Get(kind, name string) (blueprints.Blueprint, error) {
 	}
 
 	return res, nil
+}
+
+func decode[T *blueprints.Resource | *blueprints.Building](d []byte) (T, error) {
+	buf := bytes.NewBuffer(d)
+	decoder := json.NewDecoder(buf)
+	dst := new(T)
+
+	if err := decoder.Decode(dst); err != nil {
+		return nil, err
+	}
+
+	return *dst, nil
 }

@@ -6,10 +6,6 @@ const (
 )
 
 const (
-	BlueprintPath = "blueprint_path"
-)
-
-const (
 	PG_User    = "postgres.user"
 	PG_Passwd  = "postgres.password"
 	PG_Host    = "postgres.host"

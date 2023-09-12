@@ -10,6 +10,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -51,8 +52,13 @@ func TestBuildingCallback(t *testing.T) {
 		t.Fatalf("Fail: %v", err)
 	}
 
-	g.buildings = g.getStartingBuildings()
-	g.resources = g.getStartingResources()
+	var assetError error
+
+	g.buildings, assetError = g.getStartingBuildings()
+	assert.NoError(t, assetError)
+
+	g.resources, assetError = g.getStartingResources()
+	assert.NoError(t, assetError)
 
 	g.updateLimits()
 
@@ -83,13 +89,8 @@ func TestBuildingCallback(t *testing.T) {
 
 	g.buildingCallback(&payload)
 
-	if expected, actual := 1, len(g.buildings[blueprintID].Completed); expected != actual {
-		t.Fatalf("FAIL: expected amount to be %d, got %d", expected, actual)
-	}
-
-	if expected, actual := 0, len(g.buildings[blueprintID].Queue); expected != actual {
-		t.Fatalf("FAIL: expected queue to be %d, got %d", expected, actual)
-	}
+	assert.Equal(t, 1, len(g.buildings[blueprintID].Completed))
+	assert.Equal(t, 0, len(g.buildings[blueprintID].Queue))
 }
 
 func TestReserveRequest(t *testing.T) {
@@ -99,8 +100,13 @@ func TestReserveRequest(t *testing.T) {
 		t.Fatalf("Fail: %v", err)
 	}
 
-	grain.buildings = grain.getStartingBuildings()
-	grain.resources = grain.getStartingResources()
+	var assetError error
+
+	grain.buildings, assetError = grain.getStartingBuildings()
+	assert.NoError(t, assetError)
+
+	grain.resources, assetError = grain.getStartingResources()
+	assert.NoError(t, assetError)
 
 	tests := []struct {
 		label          string
@@ -142,16 +148,12 @@ func TestReserveRequest(t *testing.T) {
 			}
 
 			res, _ := grain.Reserve(&msg, nil)
-			if res == nil {
-				t.Fatalf("Fail: expected response, got nil")
-			}
-			if actual, expected := res.Status, tt.expectedStatus; actual != expected {
-				t.Fatalf("FAIL: expected status to be %s, got %s", expected, actual)
-			}
+			assert.NotNil(t, res)
+
+			assert.Equal(t, tt.expectedStatus, res.Status)
+
 			if tt.expectedStatus == protobuf.Status_Error {
-				if actual, expected := res.Error, tt.expectedError.Error(); actual != expected {
-					t.Fatalf("FAIL: expected error be %s, got %s", expected, actual)
-				}
+				assert.Equal(t, tt.expectedError.Error(), res.Error)
 			}
 		}
 

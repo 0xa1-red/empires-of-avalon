@@ -5,11 +5,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/google/uuid"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/exp/slog"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -17,6 +19,7 @@ import (
 )
 
 func setupRegistry() error {
+	viper.Set(config.Registry_Remote_Kind, "memory")
 	absPath, _ := filepath.Abs("./testdata") // nolint:errcheck
 	slog.Debug("intializing registry", "blueprint_path", absPath)
 

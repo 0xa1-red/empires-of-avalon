@@ -6,10 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/0xa1-red/empires-of-avalon/config"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/game"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry/remote"
 	"github.com/google/uuid"
+	"github.com/spf13/viper"
 	"gopkg.in/yaml.v3"
 )
 
@@ -148,19 +150,21 @@ func getStore() (*store, error) {
 			resources: newResourceStore(),
 		}
 
-		bps, err := remote.List()
-		if err != nil {
-			return nil, err
-		}
+		if viper.GetString(config.Registry_Remote_Kind) != "memory" {
+			bps, err := remote.List()
+			if err != nil {
+				return nil, err
+			}
 
-		for _, building := range bps["building"] {
-			b := building.(*blueprints.Building)
-			registry.buildings.Put(b)
-		}
+			for _, building := range bps["building"] {
+				b := building.(*blueprints.Building)
+				registry.buildings.Put(b)
+			}
 
-		for _, resource := range bps["resource"] {
-			r := resource.(*blueprints.Resource)
-			registry.resources.Put(r)
+			for _, resource := range bps["resource"] {
+				r := resource.(*blueprints.Resource)
+				registry.resources.Put(r)
+			}
 		}
 	}
 

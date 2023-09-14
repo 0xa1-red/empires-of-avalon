@@ -1,6 +1,6 @@
 syntax = "proto3";
 package proto;
-option go_package = "github.com/alfreddobradi/verbose-spork/protobuf";
+option go_package = "github.com/0xa1-red/empires-of-avalon/protobuf";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/struct.proto";
 

@@ -10,7 +10,6 @@ import (
 	intnats "github.com/0xa1-red/empires-of-avalon/transport/nats"
 	pactor "github.com/asynkron/protoactor-go/actor"
 	"github.com/asynkron/protoactor-go/cluster"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"go.opentelemetry.io/otel/attribute"
@@ -106,8 +105,6 @@ func (g *Grain) remove(a actor) {
 		slog.Debug("removing timer grain", "id", id)
 
 		delete(g.registry.Timers, id)
-
-		spew.Dump(g.registry.Timers)
 	default:
 		slog.Warn("unknown grain kind", "kind", a.Kind.Number())
 		return

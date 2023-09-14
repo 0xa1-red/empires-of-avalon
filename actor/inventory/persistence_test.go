@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/protobuf/proto"
 )
@@ -35,6 +34,4 @@ func TestEncode(t *testing.T) {
 
 	err = g.restore(snapshot)
 	assert.NoError(t, err)
-
-	spew.Dump(g)
 }

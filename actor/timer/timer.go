@@ -7,7 +7,6 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/actor"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
-	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/0xa1-red/empires-of-avalon/transport/nats"
 	"github.com/asynkron/protoactor-go/cluster"
@@ -40,13 +39,7 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 }
 
 func (g *Grain) Terminate(ctx cluster.GrainContext) {
-	if g.timer.Amount > 0 {
-		if n, err := persistence.Get().Persist(g); err != nil {
-			slog.Error("failed to persist grain", err, "kind", g.Kind(), "identity", ctx.Identity())
-		} else {
-			slog.Debug("grain successfully persisted", "kind", g.Kind(), "identity", ctx.Identity(), "written", n)
-		}
-	}
+	// persist here
 
 	g.heartbeatTicker.Stop()
 

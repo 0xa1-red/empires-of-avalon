@@ -17,7 +17,6 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/metrics"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/logging"
-	"github.com/0xa1-red/empires-of-avalon/persistence"
 	gamecluster "github.com/0xa1-red/empires-of-avalon/pkg/cluster"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/auth"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
@@ -116,15 +115,11 @@ func main() {
 	c := cluster.New(system, clusterConfig)
 	c.StartMember()
 	gamecluster.SetC(c)
-	persistence.Create(c)
 
 	if _, err := protobuf.GetAdminGrainClient(c, admin.AdminID.String()).Start(&protobuf.Empty{}); err != nil {
 		slog.Error("failed to get admin grain client", err)
 		exit(1)
 	}
-
-	restoreSnapshots("inventory")
-	restoreSnapshots("timer")
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -191,12 +186,6 @@ func initTransport() {
 	if _, err := nats.GetConnection(); err != nil {
 		slog.Error("failed to connect to NATS", err)
 		exit(1)
-	}
-}
-
-func restoreSnapshots(kind string) {
-	if err := persistence.Get().Restore(kind, ""); err != nil {
-		slog.Error("failed to restore snapshots", err, "kind", kind)
 	}
 }
 

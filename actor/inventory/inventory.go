@@ -9,7 +9,6 @@ import (
 
 	"github.com/0xa1-red/empires-of-avalon/actor"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
-	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -189,11 +188,7 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 
 	g.heartbeatTicker.Stop()
 
-	if n, err := persistence.Get().Persist(g); err != nil {
-		slog.Error("failed to persist grain", err, "kind", g.Kind(), "identity", ctx.Identity())
-	} else {
-		slog.Debug("grain successfully persisted", "kind", g.Kind(), "identity", ctx.Identity(), "written", n)
-	}
+	// Persist here
 }
 
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}
@@ -683,13 +678,13 @@ func (g *Grain) startBuildingGenerators(buildingID uuid.UUID, b *blueprints.Buil
 
 	buildingRegister, ok := g.buildings[b.ID]
 	if !ok {
-		slog.Warn("building register not found", "inventory_id", g.Identity(), "blueprint_id", b.ID)
+		slog.Warn("building register not found", "inventory_id", g.ctx.Identity(), "blueprint_id", b.ID)
 		return
 	}
 
 	completedBuilding, ok := buildingRegister.Completed[buildingID]
 	if !ok {
-		slog.Warn("building not found", "inventory_id", g.Identity(), "blueprint_id", b.ID, "building_id", buildingID)
+		slog.Warn("building not found", "inventory_id", g.ctx.Identity(), "blueprint_id", b.ID, "building_id", buildingID)
 		return
 	}
 
@@ -787,7 +782,11 @@ func (g *Grain) describeResources(ctx context.Context) map[string]*structpb.Valu
 	return resourceValues
 }
 
-func (g *Grain) InitNewInventory(res *protobuf.InitNewInventoryRequest, ctx cluster.GrainContext) (*protobuf.InitNewInventoryResponse, error) {
+func (g *Grain) attemptRestore() error {
+	return nil
+}
+
+func (g *Grain) initNewInventory() error {
 	var startingAssetsError error
 
 	g.buildings, startingAssetsError = g.getStartingBuildings()
@@ -803,5 +802,5 @@ func (g *Grain) InitNewInventory(res *protobuf.InitNewInventoryRequest, ctx clus
 	g.updateLimits()
 	g.startTimers()
 
-	return nil, nil
+	return nil
 }

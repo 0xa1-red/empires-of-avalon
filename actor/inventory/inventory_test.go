@@ -92,7 +92,7 @@ func TestBuildingCallback(t *testing.T) {
 
 	g.buildingCallback(&payload)
 
-	assert.Equal(t, 1, len(g.buildings[blueprintID].Completed))
+	assert.Equal(t, 2, len(g.buildings[blueprintID].Completed))
 	assert.Equal(t, 0, len(g.buildings[blueprintID].Queue))
 }
 

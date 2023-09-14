@@ -136,9 +136,9 @@ func (s *Store) Get(kind, name string) (blueprints.Blueprint, error) {
 
 	switch kind {
 	case blueprints.KindBuilding:
-		res = &blueprints.Building{} // nolint:exhaustruct
+		res = &blueprints.Building{}
 	case blueprints.KindResource:
-		res = &blueprints.Resource{} // nolint:exhaustruct
+		res = &blueprints.Resource{}
 	}
 
 	if err := decoder.Decode(&res); err != nil {

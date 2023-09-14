@@ -39,8 +39,6 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 }
 
 func (g *Grain) Terminate(ctx cluster.GrainContext) {
-	// persist here
-
 	g.heartbeatTicker.Stop()
 
 	if err := g.updateAdmin(protobuf.UpdateKind_Deregister); err != nil {

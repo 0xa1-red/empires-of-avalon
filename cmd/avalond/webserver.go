@@ -16,7 +16,7 @@ func startServer(wg *sync.WaitGroup, addr string) {
 
 	s := router.New()
 
-	server = &http.Server{ // nolint:exhaustruct
+	server = &http.Server{
 		Addr:              addr,
 		Handler:           s,
 		ReadHeaderTimeout: 3 * time.Second,

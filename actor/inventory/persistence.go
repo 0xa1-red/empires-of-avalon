@@ -1,3 +1,4 @@
+// nolint:unused
 package inventory
 
 import (
@@ -11,7 +12,7 @@ import (
 )
 
 func (g *Grain) Encode() ([]byte, error) {
-	snapshot := &protobuf.InventorySnapshot{ // nolint:exhaustruct
+	snapshot := &protobuf.InventorySnapshot{
 		Buildings: buildingRegistryPb(g.buildings),
 		Resources: resourceRegistryPb(g.resources),
 		Timers:    timersPb(g.timers),
@@ -29,7 +30,7 @@ func buildingRegistryPb(buildings map[uuid.UUID]*BuildingRegister) []*protobuf.I
 			completed = append(completed, buildingPb(bb))
 		}
 
-		b := &protobuf.InventoryBuildingRegistry{ // nolint:exhaustruct
+		b := &protobuf.InventoryBuildingRegistry{
 			BlueprintID: reg.BlueprintID.String(),
 			Name:        reg.Name.String(),
 			Completed:   completed,
@@ -142,7 +143,7 @@ func restoreBuildingRegisters(pb []*protobuf.InventoryBuildingRegistry) (map[uui
 			return nil, err
 		}
 
-		register := &BuildingRegister{ // nolint:exhaustruct
+		register := &BuildingRegister{
 			BlueprintID: blueprintID,
 			Name:        blueprints.BuildingName(reg.Name),
 			Completed:   make(map[uuid.UUID]Building),
@@ -204,7 +205,7 @@ func restoreBuildingTimers(pb []*protobuf.BuildingTimer) ([]uuid.UUID, error) {
 }
 
 func restoreBuilding(building *protobuf.InventoryBuilding, blueprintID uuid.UUID) (Building, error) {
-	b := Building{} // nolint:exhaustruct
+	b := Building{}
 
 	buildingID, err := uuid.Parse(building.ID)
 	if err != nil {
@@ -243,6 +244,7 @@ func restoreBuilding(building *protobuf.InventoryBuilding, blueprintID uuid.UUID
 
 func restoreResourceRegisters(pb []*protobuf.InventoryResourceRegistry) (map[blueprints.ResourceName]*ResourceRegister, error) {
 	register := make(map[blueprints.ResourceName]*ResourceRegister)
+
 	for _, r := range pb {
 		resource := &ResourceRegister{
 			mx: &sync.Mutex{},
@@ -262,6 +264,7 @@ func restoreResourceRegisters(pb []*protobuf.InventoryResourceRegistry) (map[blu
 
 func restoreTimers(pb []*protobuf.InventoryTimer) (map[uuid.UUID]struct{}, error) {
 	timers := make(map[uuid.UUID]struct{})
+
 	for _, t := range pb {
 		id, err := uuid.Parse(t.ID)
 		if err != nil {
@@ -270,5 +273,6 @@ func restoreTimers(pb []*protobuf.InventoryTimer) (map[uuid.UUID]struct{}, error
 
 		timers[id] = struct{}{}
 	}
+
 	return timers, nil
 }

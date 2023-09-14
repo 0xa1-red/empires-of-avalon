@@ -23,7 +23,7 @@ func SendUpdate(update *protobuf.GrainUpdate) error {
 }
 
 func Register(kind protobuf.GrainKind, identity string) error {
-	return SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
+	return SendUpdate(&protobuf.GrainUpdate{
 		UpdateKind: protobuf.UpdateKind_Register,
 		GrainKind:  kind,
 		Timestamp:  timestamppb.Now(),
@@ -32,7 +32,7 @@ func Register(kind protobuf.GrainKind, identity string) error {
 }
 
 func Heartbeat(kind protobuf.GrainKind, identity string) error {
-	return SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
+	return SendUpdate(&protobuf.GrainUpdate{
 		UpdateKind: protobuf.UpdateKind_Heartbeat,
 		GrainKind:  kind,
 		Timestamp:  timestamppb.Now(),

@@ -39,6 +39,55 @@ enum BuildingState {
     BuildingStateActive = 3;
 }
 
+message InventorySnapshot {
+    repeated InventoryBuildingRegistry Buildings = 1;
+    repeated InventoryResourceRegistry Resources = 2;
+    repeated InventoryTimer Timers = 3;
+}
+
+message InventoryBuildingRegistry {
+    string BlueprintID = 1;
+    string Name = 2;
+    repeated InventoryBuilding Completed = 3;
+    repeated InventoryBuilding Queued = 4;
+    repeated InventoryTimer Timers = 5;
+}
+
+message InventoryBuilding {
+    string ID = 1;
+    string BlueprintID = 2;
+    string Name = 3;
+    BuildingState State = 4;
+    int32 WorkersMax = 5;
+    int32 WorkersCurr = 6;
+    google.protobuf.Timestamp Completed = 7;
+    repeated ReservedResource ReservedResources = 8;
+    repeated BuildingTimer Generators = 9;
+    repeated BuildingTimer Transformers = 10;
+}
+
+message InventoryTimer {
+    string ID = 1;
+}
+
+message ReservedResource {
+    string Name = 1;
+    int64 Amount = 2;
+    bool Permanent = 3;
+}
+
+message BuildingTimer {
+    string ID = 1;
+}
+
+message InventoryResourceRegistry {
+    string Name = 1;
+    string CapFormula = 2;
+    int64 Cap = 3;
+    int64 Amount = 4;
+    int64 Reserved = 5;
+}
+
 message StartBuildingRequest {
     string TraceID = 1;
     string Name = 2;

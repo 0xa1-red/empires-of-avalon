@@ -2,6 +2,7 @@
 kind: Building
 name: House
 build_time: 10s
+initial_amount: 1
 cost:
   - resource: Wood
     amount: 20
@@ -19,6 +20,7 @@ stores:
 kind: Building
 name: Warehouse
 build_time: 10s
+initial_amount: 0
 cost:
   - resource: Wood
     amount: 50
@@ -34,6 +36,7 @@ stores:
 kind: Building
 name: Woodcutter
 build_time: 10s
+initial_amount: 0
 cost:
   - resource: Wood
     amount: 30
@@ -49,6 +52,7 @@ generates:
 kind: Building
 name: Lumberyard
 build_time: 10s
+initial_amount: 0
 cost:
   - resource: Wood
     amount: 50

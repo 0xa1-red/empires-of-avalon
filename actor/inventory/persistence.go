@@ -111,12 +111,35 @@ func timersPb(timers map[uuid.UUID]struct{}) []*protobuf.InventoryTimer {
 }
 
 func (g *Grain) restore(snapshot *protobuf.InventorySnapshot) error {
+	buildings, err := restoreBuildingRegisters(snapshot.Buildings)
+	if err != nil {
+		return err
+	}
+
+	resources, err := restoreResourceRegisters(snapshot.Resources)
+	if err != nil {
+		return err
+	}
+
+	timers, err := restoreTimers(snapshot.Timers)
+	if err != nil {
+		return err
+	}
+
+	g.buildings = buildings
+	g.resources = resources
+	g.timers = timers
+
+	return nil
+}
+
+func restoreBuildingRegisters(pb []*protobuf.InventoryBuildingRegistry) (map[uuid.UUID]*BuildingRegister, error) {
 	buildings := make(map[uuid.UUID]*BuildingRegister)
 
-	for _, reg := range snapshot.Buildings {
+	for _, reg := range pb {
 		blueprintID, err := uuid.Parse(reg.BlueprintID)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		register := &BuildingRegister{ // nolint:exhaustruct
@@ -129,21 +152,28 @@ func (g *Grain) restore(snapshot *protobuf.InventorySnapshot) error {
 		for _, building := range reg.Completed {
 			b, err := restoreBuilding(building, blueprintID)
 			if err != nil {
-				return err
+				return nil, err
 			}
 
 			register.Completed[b.ID] = b
 		}
 
+		for _, building := range reg.Queued {
+			b, err := restoreBuilding(building, blueprintID)
+			if err != nil {
+				return nil, err
+			}
+
+			register.Queue[b.ID] = b
+		}
+
 		buildings[blueprintID] = register
 	}
 
-	g.buildings = buildings
-
-	return nil
+	return buildings, nil
 }
 
-func restoreResources(pb []*protobuf.ReservedResource) []ReservedResource {
+func restoreReservedResources(pb []*protobuf.ReservedResource) []ReservedResource {
 	resources := make([]ReservedResource, 0)
 
 	for _, res := range pb {
@@ -158,7 +188,7 @@ func restoreResources(pb []*protobuf.ReservedResource) []ReservedResource {
 	return resources
 }
 
-func restoreTimers(pb []*protobuf.BuildingTimer) ([]uuid.UUID, error) {
+func restoreBuildingTimers(pb []*protobuf.BuildingTimer) ([]uuid.UUID, error) {
 	timers := make([]uuid.UUID, 0)
 
 	for _, timer := range pb {
@@ -181,12 +211,12 @@ func restoreBuilding(building *protobuf.InventoryBuilding, blueprintID uuid.UUID
 		return b, err
 	}
 
-	transformers, err := restoreTimers(building.Transformers)
+	transformers, err := restoreBuildingTimers(building.Transformers)
 	if err != nil {
 		return b, err
 	}
 
-	generators, err := restoreTimers(building.Generators)
+	generators, err := restoreBuildingTimers(building.Generators)
 	if err != nil {
 		return b, err
 	}
@@ -199,7 +229,7 @@ func restoreBuilding(building *protobuf.InventoryBuilding, blueprintID uuid.UUID
 		WorkersMaximum:    int(building.WorkersMax),
 		WorkersCurrent:    int(building.WorkersCurr),
 		Completion:        building.Completed.AsTime(),
-		ReservedResources: restoreResources(building.ReservedResources),
+		ReservedResources: restoreReservedResources(building.ReservedResources),
 		Timers: &TimerRegister{
 			mx: &sync.Mutex{},
 
@@ -209,4 +239,36 @@ func restoreBuilding(building *protobuf.InventoryBuilding, blueprintID uuid.UUID
 	}
 
 	return b, nil
+}
+
+func restoreResourceRegisters(pb []*protobuf.InventoryResourceRegistry) (map[blueprints.ResourceName]*ResourceRegister, error) {
+	register := make(map[blueprints.ResourceName]*ResourceRegister)
+	for _, r := range pb {
+		resource := &ResourceRegister{
+			mx: &sync.Mutex{},
+
+			Name:       blueprints.ResourceName(r.Name),
+			CapFormula: r.CapFormula,
+			Cap:        int(r.Cap),
+			Amount:     int(r.Amount),
+			Reserved:   int(r.Reserved),
+		}
+
+		register[resource.Name] = resource
+	}
+
+	return register, nil
+}
+
+func restoreTimers(pb []*protobuf.InventoryTimer) (map[uuid.UUID]struct{}, error) {
+	timers := make(map[uuid.UUID]struct{})
+	for _, t := range pb {
+		id, err := uuid.Parse(t.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		timers[id] = struct{}{}
+	}
+	return timers, nil
 }

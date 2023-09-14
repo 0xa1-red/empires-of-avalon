@@ -187,8 +187,6 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 	}
 
 	g.heartbeatTicker.Stop()
-
-	// Persist here
 }
 
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}

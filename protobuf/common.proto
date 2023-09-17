@@ -88,6 +88,17 @@ message InventoryResourceRegistry {
     int64 Reserved = 5;
 }
 
+message TimerSnapshot {
+    string ID = 1;
+    TimerKind Kind = 2;
+    string InventoryID = 3;
+    string ReplySubject = 4;
+    int64 Amount = 5;
+    google.protobuf.Timestamp Start = 6;
+    string Interval = 7;
+    google.protobuf.Struct Data = 8;
+}
+
 message StartBuildingRequest {
     string TraceID = 1;
     string Name = 2;

@@ -116,8 +116,9 @@ func main() {
 	c.StartMember()
 	gamecluster.SetC(c)
 
-	if _, err := protobuf.GetAdminGrainClient(c, admin.AdminID.String()).Start(&protobuf.Empty{}); err != nil {
-		slog.Error("failed to get admin grain client", err)
+	adminGrainClient := protobuf.GetAdminGrainClient(c, admin.AdminID.String())
+	if _, err := adminGrainClient.Start(&protobuf.Empty{}); err != nil {
+		slog.Error("failed to start admin grain client", err)
 		exit(1)
 	}
 
@@ -176,7 +177,7 @@ func initToken() {
 }
 
 func initDatabase() {
-	if err := database.CreateConnection(); err != nil {
+	if err := database.Open(); err != nil {
 		slog.Error("failed to connect to database", err)
 		exit(1)
 	}

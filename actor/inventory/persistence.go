@@ -5,11 +5,15 @@ import (
 	"sync"
 
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+var _ persistence.Persistable = (*Grain)(nil)
+var _ persistence.Restorable = (*Grain)(nil)
 
 func (g *Grain) Encode() ([]byte, error) {
 	snapshot := &protobuf.InventorySnapshot{
@@ -111,7 +115,12 @@ func timersPb(timers map[uuid.UUID]struct{}) []*protobuf.InventoryTimer {
 	return pb
 }
 
-func (g *Grain) restore(snapshot *protobuf.InventorySnapshot) error {
+func (g *Grain) Restore(raw []byte) error {
+	snapshot := &protobuf.InventorySnapshot{}
+	if err := proto.Unmarshal(raw, snapshot); err != nil {
+		return err
+	}
+
 	buildings, err := restoreBuildingRegisters(snapshot.Buildings)
 	if err != nil {
 		return err

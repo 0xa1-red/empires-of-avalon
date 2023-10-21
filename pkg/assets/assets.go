@@ -10,7 +10,17 @@ var _Assets97b9446a0df6936070d46bfa8dbe9801fcb7f8eb = "<!DOCTYPE html>\n<html la
 
 // Assets returns go-assets FileSystem
 var Assets = assets.NewFileSystem(map[string][]string{"/": []string{"assets"}, "/assets": []string{}, "/assets/templates": []string{}, "/assets/templates/admin": []string{"index.gohtml"}}, map[string]*assets.File{
-	"/": &assets.File{
+	"/assets/templates/admin": &assets.File{
+		Path:     "/assets/templates/admin",
+		FileMode: 0x800001ed,
+		Mtime:    time.Unix(1693432101, 1693432101479091638),
+		Data:     nil,
+	}, "/assets/templates/admin/index.gohtml": &assets.File{
+		Path:     "/assets/templates/admin/index.gohtml",
+		FileMode: 0x1a4,
+		Mtime:    time.Unix(1693432101, 1693432101479373345),
+		Data:     []byte(_Assets97b9446a0df6936070d46bfa8dbe9801fcb7f8eb),
+	}, "/": &assets.File{
 		Path:     "/",
 		FileMode: 0x800001ed,
 		Mtime:    time.Unix(1694672445, 1694672445538066054),
@@ -25,14 +35,4 @@ var Assets = assets.NewFileSystem(map[string][]string{"/": []string{"assets"}, "
 		FileMode: 0x800001ed,
 		Mtime:    time.Unix(1693432101, 1693432101479039429),
 		Data:     nil,
-	}, "/assets/templates/admin": &assets.File{
-		Path:     "/assets/templates/admin",
-		FileMode: 0x800001ed,
-		Mtime:    time.Unix(1693432101, 1693432101479091638),
-		Data:     nil,
-	}, "/assets/templates/admin/index.gohtml": &assets.File{
-		Path:     "/assets/templates/admin/index.gohtml",
-		FileMode: 0x1a4,
-		Mtime:    time.Unix(1693432101, 1693432101479373345),
-		Data:     []byte(_Assets97b9446a0df6936070d46bfa8dbe9801fcb7f8eb),
 	}}, "")

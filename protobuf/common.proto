@@ -39,6 +39,17 @@ enum BuildingState {
     BuildingStateActive = 3;
 }
 
+message InventoryPersistRequest {
+    string TraceID = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+}
+
+message InventoryPersistResponse {
+    Status Status = 1;
+    string Error = 2;
+    google.protobuf.Timestamp Timestamp = 3;
+}
+
 message InventorySnapshot {
     repeated InventoryBuildingRegistry Buildings = 1;
     repeated InventoryResourceRegistry Resources = 2;
@@ -213,10 +224,22 @@ message GrainUpdate {
     google.protobuf.Struct Context = 6;
 }
 
+message ShutdownRequest {
+    string TraceID = 1;
+    google.protobuf.Timestamp Timestamp = 2;
+}
+
+message ShutdownResponse {
+    Status Status = 1;
+    string Error = 2;
+    google.protobuf.Timestamp Timtestamp = 3;
+}
+
 service Inventory {
     rpc StartBuilding (StartBuildingRequest) returns (StartBuildingResponse);
     rpc Describe (DescribeInventoryRequest) returns (DescribeInventoryResponse);
     rpc Reserve (ReserveRequest) returns (ReserveResponse);
+    rpc Persist (InventoryPersistRequest) returns (InventoryPersistResponse);
 }
 
 service Timer {
@@ -227,4 +250,5 @@ service Timer {
 service Admin {
     rpc Start (Empty) returns (Empty);
     rpc Describe (DescribeAdminRequest) returns (DescribeAdminResponse);
+    rpc Shutdown (ShutdownRequest) returns (ShutdownResponse);
 }

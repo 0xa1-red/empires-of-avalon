@@ -74,6 +74,7 @@ type Inventory interface {
 	StartBuilding(*StartBuildingRequest, cluster.GrainContext) (*StartBuildingResponse, error)
 	Describe(*DescribeInventoryRequest, cluster.GrainContext) (*DescribeInventoryResponse, error)
 	Reserve(*ReserveRequest, cluster.GrainContext) (*ReserveResponse, error)
+	Persist(*InventoryPersistRequest, cluster.GrainContext) (*InventoryPersistResponse, error)
 }
 
 // InventoryGrainClient holds the base data for the InventoryGrain
@@ -148,6 +149,32 @@ func (g *InventoryGrainClient) Reserve(r *ReserveRequest, opts ...cluster.GrainC
 	switch msg := resp.(type) {
 	case *cluster.GrainResponse:
 		result := &ReserveResponse{}
+		err = proto.Unmarshal(msg.MessageData, result)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	case *cluster.GrainErrorResponse:
+		return nil, errors.New(msg.Err)
+	default:
+		return nil, errors.New("unknown response")
+	}
+}
+
+// Persist requests the execution on to the cluster with CallOptions
+func (g *InventoryGrainClient) Persist(r *InventoryPersistRequest, opts ...cluster.GrainCallOption) (*InventoryPersistResponse, error) {
+	bytes, err := proto.Marshal(r)
+	if err != nil {
+		return nil, err
+	}
+	reqMsg := &cluster.GrainRequest{MethodIndex: 3, MessageData: bytes}
+	resp, err := g.cluster.Call(g.Identity, "Inventory", reqMsg, opts...)
+	if err != nil {
+		return nil, err
+	}
+	switch msg := resp.(type) {
+	case *cluster.GrainResponse:
+		result := &InventoryPersistResponse{}
 		err = proto.Unmarshal(msg.MessageData, result)
 		if err != nil {
 			return nil, err
@@ -254,6 +281,30 @@ func (a *InventoryActor) Receive(ctx actor.Context) {
 			bytes, err := proto.Marshal(r0)
 			if err != nil {
 				plog.Error("Reserve(ReserveRequest) proto.Marshal failed", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			resp := &cluster.GrainResponse{MessageData: bytes}
+			ctx.Respond(resp)
+		case 3:
+			req := &InventoryPersistRequest{}
+			err := proto.Unmarshal(msg.MessageData, req)
+			if err != nil {
+				plog.Error("Persist(InventoryPersistRequest) proto.Unmarshal failed.", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			r0, err := a.inner.Persist(req, a.ctx)
+			if err != nil {
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			bytes, err := proto.Marshal(r0)
+			if err != nil {
+				plog.Error("Persist(InventoryPersistRequest) proto.Marshal failed", logmod.Error(err))
 				resp := &cluster.GrainErrorResponse{Err: err.Error()}
 				ctx.Respond(resp)
 				return
@@ -506,6 +557,7 @@ type Admin interface {
 	ReceiveDefault(ctx cluster.GrainContext)
 	Start(*Empty, cluster.GrainContext) (*Empty, error)
 	Describe(*DescribeAdminRequest, cluster.GrainContext) (*DescribeAdminResponse, error)
+	Shutdown(*ShutdownRequest, cluster.GrainContext) (*ShutdownResponse, error)
 }
 
 // AdminGrainClient holds the base data for the AdminGrain
@@ -554,6 +606,32 @@ func (g *AdminGrainClient) Describe(r *DescribeAdminRequest, opts ...cluster.Gra
 	switch msg := resp.(type) {
 	case *cluster.GrainResponse:
 		result := &DescribeAdminResponse{}
+		err = proto.Unmarshal(msg.MessageData, result)
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	case *cluster.GrainErrorResponse:
+		return nil, errors.New(msg.Err)
+	default:
+		return nil, errors.New("unknown response")
+	}
+}
+
+// Shutdown requests the execution on to the cluster with CallOptions
+func (g *AdminGrainClient) Shutdown(r *ShutdownRequest, opts ...cluster.GrainCallOption) (*ShutdownResponse, error) {
+	bytes, err := proto.Marshal(r)
+	if err != nil {
+		return nil, err
+	}
+	reqMsg := &cluster.GrainRequest{MethodIndex: 2, MessageData: bytes}
+	resp, err := g.cluster.Call(g.Identity, "Admin", reqMsg, opts...)
+	if err != nil {
+		return nil, err
+	}
+	switch msg := resp.(type) {
+	case *cluster.GrainResponse:
+		result := &ShutdownResponse{}
 		err = proto.Unmarshal(msg.MessageData, result)
 		if err != nil {
 			return nil, err
@@ -636,6 +714,30 @@ func (a *AdminActor) Receive(ctx actor.Context) {
 			bytes, err := proto.Marshal(r0)
 			if err != nil {
 				plog.Error("Describe(DescribeAdminRequest) proto.Marshal failed", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			resp := &cluster.GrainResponse{MessageData: bytes}
+			ctx.Respond(resp)
+		case 2:
+			req := &ShutdownRequest{}
+			err := proto.Unmarshal(msg.MessageData, req)
+			if err != nil {
+				plog.Error("Shutdown(ShutdownRequest) proto.Unmarshal failed.", logmod.Error(err))
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			r0, err := a.inner.Shutdown(req, a.ctx)
+			if err != nil {
+				resp := &cluster.GrainErrorResponse{Err: err.Error()}
+				ctx.Respond(resp)
+				return
+			}
+			bytes, err := proto.Marshal(r0)
+			if err != nil {
+				plog.Error("Shutdown(ShutdownRequest) proto.Marshal failed", logmod.Error(err))
 				resp := &cluster.GrainErrorResponse{Err: err.Error()}
 				ctx.Respond(resp)
 				return

@@ -3,9 +3,11 @@ package admin
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/metrics"
+	gamecluster "github.com/0xa1-red/empires-of-avalon/pkg/cluster"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
 	intnats "github.com/0xa1-red/empires-of-avalon/transport/nats"
 	pactor "github.com/asynkron/protoactor-go/actor"
@@ -21,6 +23,7 @@ import (
 
 var AdminID = uuid.NewSHA1(uuid.NameSpaceOID, []byte("avalon.admin"))
 var AdminSubject = fmt.Sprintf("admin-updates-%s", AdminID.String())
+var BroadcastSubject = fmt.Sprintf("admin-broadcast-%s", AdminID.String())
 
 type actor struct {
 	Identity    string
@@ -56,9 +59,70 @@ func (a actor) AsMap() map[string]interface{} {
 	return m
 }
 
+var (
+	errActorNotExist = fmt.Errorf("actor grain is not found in registry")
+)
+
+func newActorCollection() *actorCollection {
+	return &actorCollection{
+		mx: &sync.Mutex{},
+
+		actors: make(map[string]actor),
+	}
+}
+
+type actorCollection struct {
+	mx *sync.Mutex
+
+	actors map[string]actor
+}
+
+func (c *actorCollection) set(key string, a actor) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+
+	c.actors[key] = a
+}
+
+func (c *actorCollection) remove(key string) error {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+
+	if _, ok := c.actors[key]; !ok {
+		return errActorNotExist
+	}
+
+	delete(c.actors, key)
+
+	return nil
+}
+
+func (c *actorCollection) iterPtr(fn func(a *actor)) {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+
+	for _, a := range c.actors {
+		a := a
+		fn(&a)
+	}
+}
+
+func (c *actorCollection) asMap() map[string]map[string]interface{} {
+	c.mx.Lock()
+	defer c.mx.Unlock()
+
+	res := make(map[string]map[string]interface{})
+
+	for k, v := range c.actors {
+		res[k] = v.AsMap()
+	}
+
+	return res
+}
+
 type registry struct {
-	Inventories map[string]actor
-	Timers      map[string]actor
+	Inventories *actorCollection
+	Timers      *actorCollection
 }
 
 func (g *Grain) add(a actor) {
@@ -71,9 +135,9 @@ func (g *Grain) add(a actor) {
 
 	switch a.Kind {
 	case protobuf.GrainKind_InventoryGrain:
-		g.registry.Inventories[a.PID.GrainID.String()] = a
+		g.registry.Inventories.set(a.PID.GrainID.String(), a)
 	case protobuf.GrainKind_TimerGrain:
-		g.registry.Timers[a.PID.GrainID.String()] = a
+		g.registry.Timers.set(a.PID.GrainID.String(), a)
 	default:
 		slog.Warn("unknown grain kind", "kind", a.Kind.Number())
 		return
@@ -90,21 +154,15 @@ func (g *Grain) remove(a actor) {
 
 	switch a.Kind {
 	case protobuf.GrainKind_InventoryGrain:
-		if _, ok := g.registry.Inventories[id]; !ok {
-			slog.Warn("grain doesn't exist in registry", "kind", a.Kind.String(), "id", id)
+		if err := g.registry.Inventories.remove(id); err != nil {
+			slog.Error("failed to remove actor grain from registry", err, "kind", a.Kind.String(), "id", id)
 			return
 		}
-
-		delete(g.registry.Inventories, id)
 	case protobuf.GrainKind_TimerGrain:
-		if _, ok := g.registry.Timers[id]; !ok {
-			slog.Warn("grain doesn't exist in registry", "kind", a.Kind.String(), "id", id)
+		if err := g.registry.Timers.remove(id); err != nil {
+			slog.Error("failed to remove actor grain from registry", err, "kind", a.Kind.String(), "id", id)
 			return
 		}
-
-		slog.Debug("removing timer grain", "id", id)
-
-		delete(g.registry.Timers, id)
 	default:
 		slog.Warn("unknown grain kind", "kind", a.Kind.Number())
 		return
@@ -119,9 +177,9 @@ func (g *Grain) remove(a actor) {
 func (g *Grain) heartbeat(a actor) {
 	switch a.Kind {
 	case protobuf.GrainKind_InventoryGrain:
-		g.registry.Inventories[a.PID.GrainID.String()] = a
+		g.registry.Inventories.set(a.PID.GrainID.String(), a)
 	case protobuf.GrainKind_TimerGrain:
-		g.registry.Timers[a.PID.GrainID.String()] = a
+		g.registry.Timers.set(a.PID.GrainID.String(), a)
 	default:
 		slog.Warn("unknown grain kind", "kind", a.Kind.Number())
 		return
@@ -164,8 +222,8 @@ func (g *Grain) Start(_ *protobuf.Empty, ctx cluster.GrainContext) (*protobuf.Em
 	slog.Info("spawning admin actor", "identity", ctx.Identity())
 
 	g.registry = &registry{
-		Inventories: make(map[string]actor),
-		Timers:      make(map[string]actor),
+		Inventories: newActorCollection(),
+		Timers:      newActorCollection(),
 	}
 
 	transport, err := intnats.GetConnection()
@@ -185,15 +243,8 @@ func (g *Grain) Start(_ *protobuf.Empty, ctx cluster.GrainContext) (*protobuf.Em
 	g.cleanupTimer = time.NewTicker(30 * time.Second)
 	go func() {
 		for range g.cleanupTimer.C {
-			for i := range g.registry.Inventories {
-				actor := g.registry.Inventories[i]
-				checkHeartbeat(&actor)
-			}
-
-			for i := range g.registry.Timers {
-				actor := g.registry.Timers[i]
-				checkHeartbeat(&actor)
-			}
+			g.registry.Inventories.iterPtr(checkHeartbeat)
+			g.registry.Timers.iterPtr(checkHeartbeat)
 		}
 	}()
 
@@ -252,15 +303,8 @@ func (g *Grain) messageCallback(t *protobuf.GrainUpdate) {
 }
 
 func (g *Grain) Describe(req *protobuf.DescribeAdminRequest, ctx cluster.GrainContext) (*protobuf.DescribeAdminResponse, error) {
-	inventoryRegistry := make(map[string]interface{})
-	for k, v := range g.registry.Inventories {
-		inventoryRegistry[k] = v.AsMap()
-	}
-
-	timerRegistry := make(map[string]interface{})
-	for k, v := range g.registry.Timers {
-		timerRegistry[k] = v.AsMap()
-	}
+	inventoryRegistry := g.registry.Inventories.asMap()
+	timerRegistry := g.registry.Timers.asMap()
 
 	registry := map[string]interface{}{
 		"inventories": inventoryRegistry,
@@ -287,4 +331,32 @@ func (g *Grain) Describe(req *protobuf.DescribeAdminRequest, ctx cluster.GrainCo
 		Status:    protobuf.Status_OK,
 		Error:     "",
 	}, nil
+}
+
+func (g *Grain) Shutdown(req *protobuf.ShutdownRequest, ctx cluster.GrainContext) (*protobuf.ShutdownResponse, error) {
+	g.registry.Inventories.mx.Lock()
+	inventories := g.registry.Inventories
+	g.registry.Inventories.mx.Unlock()
+
+	// persistStatus :=
+
+	for _, a := range inventories.actors {
+		client := protobuf.GetInventoryGrainClient(gamecluster.GetC(), a.PID.GrainID.String())
+
+		res, err := client.Persist(&protobuf.InventoryPersistRequest{})
+		if err != nil {
+			slog.Warn("actor persist request failed", "error", err.Error(), "identity", a.Identity, "kind", a.Kind)
+		}
+
+		switch res.Status {
+		case protobuf.Status_Error:
+			slog.Warn("actor persist request failed", "error", res.Error, "identity", a.Identity, "kind", a.Kind)
+		case protobuf.Status_Unknown:
+			slog.Warn("actor persist request responded with unknown status", "identity", a.Identity, "kind", a.Kind)
+		case protobuf.Status_OK:
+			slog.Debug("actor persist request finished", "identity", a.Identity, "kind", a.Kind)
+		}
+	}
+
+	return &protobuf.ShutdownResponse{Status: protobuf.Status_OK}, nil
 }

@@ -142,6 +142,9 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		}
 	}
 
+	g.updateLimits()
+	g.startTimers()
+
 	if err := g.subscribeToTimerStopped(); err != nil {
 		slog.Error("failed to subscribe to callback", err,
 			"callback", CallbackTimerStopped,
@@ -869,9 +872,6 @@ func (g *Grain) initNewInventory() error {
 	if startingAssetsError != nil {
 		slog.Error("failed to get starting resources", startingAssetsError)
 	}
-
-	g.updateLimits()
-	g.startTimers()
 
 	return nil
 }

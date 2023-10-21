@@ -14,6 +14,8 @@ type Persistable interface {
 }
 
 type Restorable interface {
+	GetID() string
+	GetKind() string
 	Restore(raw []byte) error
 }
 

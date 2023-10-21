@@ -7,6 +7,7 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -21,6 +22,9 @@ func (g *Grain) Encode() ([]byte, error) {
 		Resources: resourceRegistryPb(g.resources),
 		Timers:    timersPb(g.timers),
 	}
+
+	spew.Dump(g.timers)
+	spew.Dump(snapshot.Timers)
 
 	return proto.Marshal(snapshot)
 }

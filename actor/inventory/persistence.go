@@ -1,108 +1,291 @@
+// nolint:unused
 package inventory
 
 import (
-	"bytes"
-	"encoding/gob"
-	"fmt"
 	"sync"
 
-	"github.com/0xa1-red/empires-of-avalon/config"
-	"github.com/0xa1-red/empires-of-avalon/persistence/encoding"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
-	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
+	"github.com/0xa1-red/empires-of-avalon/pkg/service/persistence"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
-	"github.com/asynkron/protoactor-go/cluster"
+	"github.com/davecgh/go-spew/spew"
 	"github.com/google/uuid"
-	"github.com/spf13/viper"
-	"golang.org/x/exp/slog"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+var _ persistence.Persistable = (*Grain)(nil)
+var _ persistence.Restorable = (*Grain)(nil)
+
 func (g *Grain) Encode() ([]byte, error) {
-	encode := make(map[string]interface{})
-	data := make(map[string]interface{})
-
-	data["buildings"] = g.buildings
-	data["resources"] = g.resources
-	encode["data"] = data
-	encode["identity"] = g.ctx.Identity()
-
-	buf := bytes.NewBuffer([]byte(""))
-
-	if err := encoding.Encode(data, buf); err != nil {
-		return nil, err
+	snapshot := &protobuf.InventorySnapshot{
+		Buildings: buildingRegistryPb(g.buildings),
+		Resources: resourceRegistryPb(g.resources),
+		Timers:    timersPb(g.timers),
 	}
 
-	return buf.Bytes(), nil
+	spew.Dump(g.timers)
+	spew.Dump(snapshot.Timers)
+
+	return proto.Marshal(snapshot)
 }
 
-func (g *Grain) Decode(b []byte) error {
-	m := make(map[string]interface{})
+func buildingRegistryPb(buildings map[uuid.UUID]*BuildingRegister) []*protobuf.InventoryBuildingRegistry {
+	collection := make([]*protobuf.InventoryBuildingRegistry, 0)
 
-	if err := encoding.Decode(b, m); err != nil {
+	for _, reg := range buildings {
+		completed := make([]*protobuf.InventoryBuilding, 0)
+		for _, bb := range reg.Completed {
+			completed = append(completed, buildingPb(bb))
+		}
+
+		b := &protobuf.InventoryBuildingRegistry{
+			BlueprintID: reg.BlueprintID.String(),
+			Name:        reg.Name.String(),
+			Completed:   completed,
+		}
+		b.BlueprintID = reg.BlueprintID.String()
+		b.Name = reg.Name.String()
+		collection = append(collection, b)
+	}
+
+	return collection
+}
+
+func buildingPb(bb Building) *protobuf.InventoryBuilding {
+	copy := &protobuf.InventoryBuilding{
+		ID:                bb.ID.String(),
+		BlueprintID:       bb.BlueprintID.String(),
+		Name:              bb.Name.String(),
+		State:             bb.State,
+		WorkersMax:        int32(bb.WorkersMaximum),
+		WorkersCurr:       int32(bb.WorkersMaximum),
+		Completed:         timestamppb.New(bb.Completion),
+		ReservedResources: reservedResourcesPb(bb.ReservedResources),
+		Generators:        buildingTimersPb(bb.Timers.Generators),
+		Transformers:      buildingTimersPb(bb.Timers.Transformers),
+	}
+
+	return copy
+}
+
+func reservedResourcesPb(rr []ReservedResource) []*protobuf.ReservedResource {
+	pb := make([]*protobuf.ReservedResource, 0)
+	for _, resource := range rr {
+		pb = append(pb, &protobuf.ReservedResource{
+			Name:      resource.Name,
+			Amount:    int64(resource.Amount),
+			Permanent: resource.Permanent,
+		})
+	}
+
+	return pb
+}
+
+func buildingTimersPb(timers []uuid.UUID) []*protobuf.BuildingTimer {
+	pb := make([]*protobuf.BuildingTimer, 0)
+	for _, t := range timers {
+		pb = append(pb, &protobuf.BuildingTimer{
+			ID: t.String(),
+		})
+	}
+
+	return pb
+}
+
+func resourceRegistryPb(resources map[blueprints.ResourceName]*ResourceRegister) []*protobuf.InventoryResourceRegistry {
+	pb := make([]*protobuf.InventoryResourceRegistry, 0)
+	for _, res := range resources {
+		pb = append(pb, &protobuf.InventoryResourceRegistry{
+			Name:       res.Name.String(),
+			CapFormula: res.CapFormula,
+			Cap:        int64(res.Cap),
+			Amount:     int64(res.Amount),
+			Reserved:   int64(res.Reserved),
+		})
+	}
+
+	return pb
+}
+
+func timersPb(timers map[uuid.UUID]struct{}) []*protobuf.InventoryTimer {
+	pb := make([]*protobuf.InventoryTimer, 0)
+
+	for id := range timers {
+		pb = append(pb, &protobuf.InventoryTimer{
+			ID: id.String(),
+		})
+	}
+
+	return pb
+}
+
+func (g *Grain) Restore(raw []byte) error {
+	snapshot := &protobuf.InventorySnapshot{}
+	if err := proto.Unmarshal(raw, snapshot); err != nil {
 		return err
 	}
 
-	if viper.GetString(config.Persistence_Encoding) == config.EncodingJson {
-		return fmt.Errorf("Unimplemented")
+	buildings, err := restoreBuildingRegisters(snapshot.Buildings)
+	if err != nil {
+		return err
 	}
 
-	g.buildings = m["buildings"].(map[uuid.UUID]*BuildingRegister)
-	g.resources = m["resources"].(map[blueprints.ResourceName]*ResourceRegister)
-
-	for _, r := range g.resources {
-		r.mx = &sync.Mutex{}
+	resources, err := restoreResourceRegisters(snapshot.Resources)
+	if err != nil {
+		return err
 	}
 
-	for blueprintID, b := range g.buildings {
-		b.mx = &sync.Mutex{}
-		if len(b.Completed) == 0 {
-			continue
-		}
-
-		slog.Debug("building decode", "name", b.Name, "amount", len(b.Completed))
-
-		blueprint, err := registry.GetBuilding(b.Name)
-		if err != nil {
-			slog.Error("failed to retrieve blueprint from registry", err, "blueprint_id", blueprintID)
-		}
-
-		for buildingID := range b.Completed {
-			g.startBuildingGenerators(buildingID, blueprint)
-			g.startBuildingTransformers(buildingID, blueprint)
-		}
+	timers, err := restoreTimers(snapshot.Timers)
+	if err != nil {
+		return err
 	}
 
-	g.updateLimits()
+	g.buildings = buildings
+	g.resources = resources
+	g.timers = timers
 
 	return nil
 }
 
-func (g *Grain) Kind() string {
-	return "inventory"
-}
+func restoreBuildingRegisters(pb []*protobuf.InventoryBuildingRegistry) (map[uuid.UUID]*BuildingRegister, error) {
+	buildings := make(map[uuid.UUID]*BuildingRegister)
 
-func (g *Grain) Identity() string {
-	return g.ctx.Identity()
-}
+	for _, reg := range pb {
+		blueprintID, err := uuid.Parse(reg.BlueprintID)
+		if err != nil {
+			return nil, err
+		}
 
-func (g *Grain) Restore(req *protobuf.RestoreRequest, ctx cluster.GrainContext) (*protobuf.RestoreResponse, error) {
-	if err := g.Decode(req.Data); err != nil {
-		return &protobuf.RestoreResponse{
-			Status: protobuf.Status_Error,
-			Error:  err.Error(),
-		}, nil
+		register := &BuildingRegister{
+			BlueprintID: blueprintID,
+			Name:        blueprints.BuildingName(reg.Name),
+			Completed:   make(map[uuid.UUID]Building),
+			Queue:       make(map[uuid.UUID]Building),
+		}
+
+		for _, building := range reg.Completed {
+			b, err := restoreBuilding(building, blueprintID)
+			if err != nil {
+				return nil, err
+			}
+
+			register.Completed[b.ID] = b
+		}
+
+		for _, building := range reg.Queued {
+			b, err := restoreBuilding(building, blueprintID)
+			if err != nil {
+				return nil, err
+			}
+
+			register.Queue[b.ID] = b
+		}
+
+		buildings[blueprintID] = register
 	}
 
-	return &protobuf.RestoreResponse{
-		Status: protobuf.Status_OK,
-		Error:  "",
-	}, nil
+	return buildings, nil
 }
 
-func init() {
-	buildingRegisters := make(map[blueprints.BuildingName]*BuildingRegister)
-	resourceRegisters := make(map[blueprints.ResourceName]*ResourceRegister)
+func restoreReservedResources(pb []*protobuf.ReservedResource) []ReservedResource {
+	resources := make([]ReservedResource, 0)
 
-	gob.Register(buildingRegisters)
-	gob.Register(resourceRegisters)
+	for _, res := range pb {
+		resource := ReservedResource{
+			Name:      res.Name,
+			Amount:    int(res.Amount),
+			Permanent: res.Permanent,
+		}
+		resources = append(resources, resource)
+	}
+
+	return resources
+}
+
+func restoreBuildingTimers(pb []*protobuf.BuildingTimer) ([]uuid.UUID, error) {
+	timers := make([]uuid.UUID, 0)
+
+	for _, timer := range pb {
+		id, err := uuid.Parse(timer.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		timers = append(timers, id)
+	}
+
+	return timers, nil
+}
+
+func restoreBuilding(building *protobuf.InventoryBuilding, blueprintID uuid.UUID) (Building, error) {
+	b := Building{}
+
+	buildingID, err := uuid.Parse(building.ID)
+	if err != nil {
+		return b, err
+	}
+
+	transformers, err := restoreBuildingTimers(building.Transformers)
+	if err != nil {
+		return b, err
+	}
+
+	generators, err := restoreBuildingTimers(building.Generators)
+	if err != nil {
+		return b, err
+	}
+
+	b = Building{
+		ID:                buildingID,
+		BlueprintID:       blueprintID,
+		Name:              blueprints.BuildingName(building.Name),
+		State:             building.State,
+		WorkersMaximum:    int(building.WorkersMax),
+		WorkersCurrent:    int(building.WorkersCurr),
+		Completion:        building.Completed.AsTime(),
+		ReservedResources: restoreReservedResources(building.ReservedResources),
+		Timers: &TimerRegister{
+			mx: &sync.Mutex{},
+
+			Transformers: transformers,
+			Generators:   generators,
+		},
+	}
+
+	return b, nil
+}
+
+func restoreResourceRegisters(pb []*protobuf.InventoryResourceRegistry) (map[blueprints.ResourceName]*ResourceRegister, error) {
+	register := make(map[blueprints.ResourceName]*ResourceRegister)
+
+	for _, r := range pb {
+		resource := &ResourceRegister{
+			mx: &sync.Mutex{},
+
+			Name:       blueprints.ResourceName(r.Name),
+			CapFormula: r.CapFormula,
+			Cap:        int(r.Cap),
+			Amount:     int(r.Amount),
+			Reserved:   int(r.Reserved),
+		}
+
+		register[resource.Name] = resource
+	}
+
+	return register, nil
+}
+
+func restoreTimers(pb []*protobuf.InventoryTimer) (map[uuid.UUID]struct{}, error) {
+	timers := make(map[uuid.UUID]struct{})
+
+	for _, t := range pb {
+		id, err := uuid.Parse(t.ID)
+		if err != nil {
+			return nil, err
+		}
+
+		timers[id] = struct{}{}
+	}
+
+	return timers, nil
 }

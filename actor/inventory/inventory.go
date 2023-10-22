@@ -1,3 +1,4 @@
+// nolint:unused
 package inventory
 
 import (
@@ -8,8 +9,8 @@ import (
 	"time"
 
 	"github.com/0xa1-red/empires-of-avalon/actor"
+	"github.com/0xa1-red/empires-of-avalon/database"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
-	"github.com/0xa1-red/empires-of-avalon/persistence"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/blueprints"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
@@ -92,10 +93,23 @@ type Callback struct {
 	Method  func(*protobuf.TimerFired)
 }
 
+func (g *Grain) attemptRestore() error {
+	db, err := database.Get()
+	if err != nil {
+		return err
+	}
+
+	return db.Restore(g)
+}
+
 func (g *Grain) Init(ctx cluster.GrainContext) {
 	g.ctx = ctx
+
+	g.buildings = make(map[uuid.UUID]*BuildingRegister)
+	g.resources = make(map[blueprints.ResourceName]*ResourceRegister)
 	g.subscriptions = make(map[string]*nats.Subscription)
 	g.timers = make(map[uuid.UUID]struct{})
+
 	g.callbacks = map[string]*Callback{
 		CallbackGenerators: {
 			Name:    CallbackGenerators,
@@ -114,33 +128,22 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		},
 	}
 
-	var startingAssetsError error
+	g.initCallbacks()
 
-	g.buildings, startingAssetsError = g.getStartingBuildings()
-	if startingAssetsError != nil {
-		slog.Error("failed to get starting buildings", startingAssetsError)
-	}
+	if err := g.attemptRestore(); err != nil {
+		slog.Warn("failed to restore inventory from snapshot", "error", err.Error())
 
-	g.resources, startingAssetsError = g.getStartingResources()
-	if startingAssetsError != nil {
-		slog.Error("failed to get starting resources", startingAssetsError)
+		if newInventoryErr := g.initNewInventory(); newInventoryErr != nil {
+			slog.Error(
+				"failed to initialize new inventory", newInventoryErr,
+				"identity", g.ctx.Identity(),
+				"kind", "inventory",
+			)
+		}
 	}
 
 	g.updateLimits()
-
-	g.initCallbacks()
-
-	for blueprintID, register := range g.buildings {
-		bp, err := registry.GetBuilding(register.Name)
-		if err != nil {
-			slog.Error("failed to retrieve building blueprint", err, "id", blueprintID)
-		}
-
-		for buildingID := range register.Completed {
-			g.startBuildingGenerators(buildingID, bp)
-			g.startBuildingTransformers(buildingID, bp)
-		}
-	}
+	g.startTimers()
 
 	if err := g.subscribeToTimerStopped(); err != nil {
 		slog.Error("failed to subscribe to callback", err,
@@ -149,47 +152,11 @@ func (g *Grain) Init(ctx cluster.GrainContext) {
 		)
 	}
 
-	if err := actor.SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
-		UpdateKind: protobuf.UpdateKind_Register,
-		GrainKind:  protobuf.GrainKind_InventoryGrain,
-		Timestamp:  timestamppb.Now(),
-		Identity:   g.ctx.Self().String(),
-	}); err != nil {
+	if err := actor.Register(protobuf.GrainKind_InventoryGrain, g.ctx.Self().String()); err != nil {
 		slog.Warn("failed to send register update to admin actor", err)
 	}
 
-	g.heartbeatTicker = time.NewTicker(30 * time.Second)
-	go func() {
-		for curTime := range g.heartbeatTicker.C {
-			if err := actor.SendUpdate(&protobuf.GrainUpdate{ // nolint:exhaustruct
-				UpdateKind: protobuf.UpdateKind_Heartbeat,
-				GrainKind:  protobuf.GrainKind_InventoryGrain,
-				Timestamp:  timestamppb.New(curTime),
-				Identity:   g.ctx.Self().String(),
-			}); err != nil {
-				slog.Warn("failed to send register update to admin actor", err)
-			}
-		}
-	}()
-}
-
-func (g *Grain) initCallbacks() {
-	for _, cb := range g.callbacks {
-		if err := g.subscribeToCallback(cb); err != nil {
-			slog.Error("failed to subscribe to callback", err,
-				"callback", cb.Name,
-				"subject", cb.Subject,
-			)
-		}
-	}
-}
-
-func (g *Grain) updateLimits() {
-	for _, resource := range g.resources {
-		if err := resource.UpdateCap(g.resources, g.buildings); err != nil {
-			slog.Error("failed to calculate resource cap", err)
-		}
-	}
+	g.startHeartbeat()
 }
 
 func (g *Grain) Terminate(ctx cluster.GrainContext) {
@@ -199,20 +166,66 @@ func (g *Grain) Terminate(ctx cluster.GrainContext) {
 		}
 	}()
 
-	if len(g.buildings) == 0 {
-		return
-	}
-
 	g.heartbeatTicker.Stop()
 
-	if n, err := persistence.Get().Persist(g); err != nil {
-		slog.Error("failed to persist grain", err, "kind", g.Kind(), "identity", ctx.Identity())
-	} else {
-		slog.Debug("grain successfully persisted", "kind", g.Kind(), "identity", ctx.Identity(), "written", n)
+	if len(g.buildings) == 0 {
+		return
 	}
 }
 
 func (g *Grain) ReceiveDefault(ctx cluster.GrainContext) {}
+
+func (g *Grain) GetKind() string {
+	return "inventory"
+}
+
+func (g *Grain) GetID() string {
+	return g.ctx.Identity()
+}
+
+func (g *Grain) Persist(req *protobuf.InventoryPersistRequest, ctx cluster.GrainContext) (*protobuf.InventoryPersistResponse, error) {
+	carrier := propagation.MapCarrier{}
+	carrier.Set("traceparent", req.TraceID)
+	pctx := otel.GetTextMapPropagator().Extract(context.Background(), carrier)
+
+	_, span := traces.Start(pctx, "actor/inventory/persist")
+	defer span.End()
+
+	db, err := database.Get()
+	if err != nil {
+		span.RecordError(err)
+		slog.Error("failed to get database connection", err,
+			"identity", g.ctx.Identity(),
+			"kind", "inventory",
+		)
+
+		return &protobuf.InventoryPersistResponse{
+			Status:    protobuf.Status_Error,
+			Error:     err.Error(),
+			Timestamp: timestamppb.Now(),
+		}, nil
+	}
+
+	if err := db.Persist(g); err != nil {
+		span.RecordError(err)
+		slog.Error("failed to persist actor", err,
+			"identity", g.ctx.Identity(),
+			"kind", "inventory",
+		)
+
+		return &protobuf.InventoryPersistResponse{
+			Status:    protobuf.Status_Error,
+			Error:     err.Error(),
+			Timestamp: timestamppb.Now(),
+		}, nil
+	}
+
+	return &protobuf.InventoryPersistResponse{
+		Status:    protobuf.Status_OK,
+		Error:     "",
+		Timestamp: timestamppb.Now(),
+	}, nil
+}
 
 func (g *Grain) StartBuilding(req *protobuf.StartBuildingRequest, ctx cluster.GrainContext) (*protobuf.StartBuildingResponse, error) {
 	carrier := propagation.MapCarrier{}
@@ -422,6 +435,50 @@ func (g *Grain) getStartingBuildings() (map[uuid.UUID]*BuildingRegister, error) 
 	}
 
 	return registers, nil
+}
+
+func (g *Grain) startHeartbeat() {
+	g.heartbeatTicker = time.NewTicker(30 * time.Second)
+	go func() {
+		for range g.heartbeatTicker.C {
+			if err := actor.Heartbeat(protobuf.GrainKind_InventoryGrain, g.ctx.Self().String()); err != nil {
+				slog.Warn("failed to send register update to admin actor", err)
+			}
+		}
+	}()
+}
+
+func (g *Grain) startTimers() {
+	for blueprintID, register := range g.buildings {
+		bp, err := registry.GetBuilding(register.Name)
+		if err != nil {
+			slog.Error("failed to retrieve building blueprint", err, "id", blueprintID)
+		}
+
+		for buildingID := range register.Completed {
+			g.startBuildingGenerators(buildingID, bp)
+			g.startBuildingTransformers(buildingID, bp)
+		}
+	}
+}
+
+func (g *Grain) initCallbacks() {
+	for _, cb := range g.callbacks {
+		if err := g.subscribeToCallback(cb); err != nil {
+			slog.Error("failed to subscribe to callback", err,
+				"callback", cb.Name,
+				"subject", cb.Subject,
+			)
+		}
+	}
+}
+
+func (g *Grain) updateLimits() {
+	for _, resource := range g.resources {
+		if err := resource.UpdateCap(g.resources, g.buildings); err != nil {
+			slog.Error("failed to calculate resource cap", err)
+		}
+	}
 }
 
 func (g *Grain) startGenerator(generator blueprints.Generator) (uuid.UUID, error) {
@@ -699,13 +756,13 @@ func (g *Grain) startBuildingGenerators(buildingID uuid.UUID, b *blueprints.Buil
 
 	buildingRegister, ok := g.buildings[b.ID]
 	if !ok {
-		slog.Warn("building register not found", "inventory_id", g.Identity(), "blueprint_id", b.ID)
+		slog.Warn("building register not found", "inventory_id", g.ctx.Identity(), "blueprint_id", b.ID)
 		return
 	}
 
 	completedBuilding, ok := buildingRegister.Completed[buildingID]
 	if !ok {
-		slog.Warn("building not found", "inventory_id", g.Identity(), "blueprint_id", b.ID, "building_id", buildingID)
+		slog.Warn("building not found", "inventory_id", g.ctx.Identity(), "blueprint_id", b.ID, "building_id", buildingID)
 		return
 	}
 
@@ -801,4 +858,20 @@ func (g *Grain) describeResources(ctx context.Context) map[string]*structpb.Valu
 	}
 
 	return resourceValues
+}
+
+func (g *Grain) initNewInventory() error {
+	var startingAssetsError error
+
+	g.buildings, startingAssetsError = g.getStartingBuildings()
+	if startingAssetsError != nil {
+		slog.Error("failed to get starting buildings", startingAssetsError)
+	}
+
+	g.resources, startingAssetsError = g.getStartingResources()
+	if startingAssetsError != nil {
+		slog.Error("failed to get starting resources", startingAssetsError)
+	}
+
+	return nil
 }

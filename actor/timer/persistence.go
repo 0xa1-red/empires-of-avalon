@@ -1,78 +1,49 @@
 package timer
 
 import (
-	"bytes"
-	"context"
-	"encoding/gob"
+	"fmt"
 
-	"github.com/0xa1-red/empires-of-avalon/persistence/encoding"
 	"github.com/0xa1-red/empires-of-avalon/protobuf"
-	"github.com/asynkron/protoactor-go/cluster"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func (g *Grain) Encode() ([]byte, error) {
-	if g.timer.Amount == 0 {
-		return nil, nil
+	if g.timer == nil {
+		return nil, fmt.Errorf("timer not initialized")
 	}
 
-	encode := make(map[string]interface{})
-	data := make(map[string]interface{})
-
-	data["timer"] = g.timer
-	encode["data"] = data
-	encode["identity"] = g.ctx.Identity()
-
-	buf := bytes.NewBuffer([]byte(""))
-
-	if err := encoding.Encode(data, buf); err != nil {
+	t, err := timerPb(g.timer)
+	if err != nil {
 		return nil, err
 	}
 
-	return buf.Bytes(), nil
+	return proto.Marshal(t)
 }
 
-func (g *Grain) Decode(b []byte) error {
-	m := make(map[string]interface{})
+func timerPb(timer *Timer) (*protobuf.TimerSnapshot, error) {
+	dataPb := &structpb.Struct{}
 
-	if err := encoding.Decode(b, m); err != nil {
-		return err
+	if timer.Data != nil {
+		var err error
+		dataPb, err = structpb.NewStruct(timer.Data)
+
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	if m["timer"].(*Timer).Amount > 0 {
-		g.timer = m["timer"].(*Timer)
+	t := &protobuf.TimerSnapshot{
+		ID:           timer.TimerID,
+		Kind:         timer.Kind,
+		InventoryID:  timer.InventoryID,
+		ReplySubject: timer.Reply,
+		Amount:       timer.Amount,
+		Start:        timestamppb.New(timer.Start),
+		Interval:     timer.Interval.String(),
+		Data:         dataPb,
 	}
 
-	return nil
-}
-
-func (g *Grain) Kind() string {
-	return "timer"
-}
-
-func (g *Grain) Identity() string {
-	return g.ctx.Identity()
-}
-
-func (g *Grain) Restore(req *protobuf.RestoreRequest, ctx cluster.GrainContext) (*protobuf.RestoreResponse, error) {
-	if err := g.Decode(req.Data); err != nil {
-		return &protobuf.RestoreResponse{
-			Status: protobuf.Status_Error,
-			Error:  err.Error(),
-		}, nil
-	}
-
-	g.startBuildingTimer(context.TODO())
-	g.startGenerateTimer(context.TODO())
-	g.startTransformTimer(context.TODO())
-
-	return &protobuf.RestoreResponse{
-		Status: protobuf.Status_OK,
-		Error:  "",
-	}, nil
-}
-
-func init() {
-	gob.Register(&Timer{})                      // nolint
-	gob.Register(&structpb.Value_StringValue{}) // nolint
+	return t, nil
 }

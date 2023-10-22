@@ -10,29 +10,29 @@ var _Assets97b9446a0df6936070d46bfa8dbe9801fcb7f8eb = "<!DOCTYPE html>\n<html la
 
 // Assets returns go-assets FileSystem
 var Assets = assets.NewFileSystem(map[string][]string{"/": []string{"assets"}, "/assets": []string{}, "/assets/templates": []string{}, "/assets/templates/admin": []string{"index.gohtml"}}, map[string]*assets.File{
-	"/assets": &assets.File{
-		Path:     "/assets",
-		FileMode: 0x800001ed,
-		Mtime:    time.Unix(1691480113, 1691480113725907006),
-		Data:     nil,
-	}, "/assets/templates": &assets.File{
-		Path:     "/assets/templates",
-		FileMode: 0x800001ed,
-		Mtime:    time.Unix(1691480119, 1691480119598570096),
-		Data:     nil,
-	}, "/assets/templates/admin": &assets.File{
+	"/assets/templates/admin": &assets.File{
 		Path:     "/assets/templates/admin",
 		FileMode: 0x800001ed,
-		Mtime:    time.Unix(1691480127, 1691480127850119080),
+		Mtime:    time.Unix(1693432101, 1693432101479091638),
 		Data:     nil,
 	}, "/assets/templates/admin/index.gohtml": &assets.File{
 		Path:     "/assets/templates/admin/index.gohtml",
 		FileMode: 0x1a4,
-		Mtime:    time.Unix(1691513327, 1691513327614456567),
+		Mtime:    time.Unix(1693432101, 1693432101479373345),
 		Data:     []byte(_Assets97b9446a0df6936070d46bfa8dbe9801fcb7f8eb),
 	}, "/": &assets.File{
 		Path:     "/",
 		FileMode: 0x800001ed,
-		Mtime:    time.Unix(1691482480, 1691482480572147412),
+		Mtime:    time.Unix(1694672445, 1694672445538066054),
+		Data:     nil,
+	}, "/assets": &assets.File{
+		Path:     "/assets",
+		FileMode: 0x800001ed,
+		Mtime:    time.Unix(1693432101, 1693432101478996305),
+		Data:     nil,
+	}, "/assets/templates": &assets.File{
+		Path:     "/assets/templates",
+		FileMode: 0x800001ed,
+		Mtime:    time.Unix(1693432101, 1693432101479039429),
 		Data:     nil,
 	}}, "")

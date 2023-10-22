@@ -17,7 +17,6 @@ import (
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/metrics"
 	"github.com/0xa1-red/empires-of-avalon/instrumentation/traces"
 	"github.com/0xa1-red/empires-of-avalon/logging"
-	"github.com/0xa1-red/empires-of-avalon/persistence"
 	gamecluster "github.com/0xa1-red/empires-of-avalon/pkg/cluster"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/auth"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/registry"
@@ -116,15 +115,17 @@ func main() {
 	c := cluster.New(system, clusterConfig)
 	c.StartMember()
 	gamecluster.SetC(c)
-	persistence.Create(c)
 
-	if _, err := protobuf.GetAdminGrainClient(c, admin.AdminID.String()).Start(&protobuf.Empty{}); err != nil {
-		slog.Error("failed to get admin grain client", err)
+	adminGrainClient := protobuf.GetAdminGrainClient(c, admin.AdminID.String())
+	if _, err := adminGrainClient.Start(&protobuf.Empty{}); err != nil {
+		slog.Error("failed to start admin grain client", err)
 		exit(1)
 	}
 
-	restoreSnapshots("inventory")
-	restoreSnapshots("timer")
+	if err := recreateInventoryGrains(c); err != nil {
+		slog.Error("failed to recreate inventory grains", err)
+		exit(1)
+	}
 
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -181,7 +182,7 @@ func initToken() {
 }
 
 func initDatabase() {
-	if err := database.CreateConnection(); err != nil {
+	if err := database.Open(); err != nil {
 		slog.Error("failed to connect to database", err)
 		exit(1)
 	}
@@ -194,12 +195,29 @@ func initTransport() {
 	}
 }
 
-func restoreSnapshots(kind string) {
-	if err := persistence.Get().Restore(kind, ""); err != nil {
-		slog.Error("failed to restore snapshots", err, "kind", kind)
-	}
-}
-
 func initRegistry() error {
 	return registry.Init()
+}
+
+func recreateInventoryGrains(c *cluster.Cluster) error {
+	db, err := database.Get()
+	if err != nil {
+		return fmt.Errorf("failed to get database handler: %w", err)
+	}
+
+	restorables, err := db.GetRestorables("inventory")
+	if err != nil {
+		return fmt.Errorf("failed to recreate inventory grains: %w", err)
+	}
+
+	for id := range restorables {
+		slog.Debug("attempting to recreate inventory grain", "identity", id.String())
+
+		inventoryGrainClient := protobuf.GetInventoryGrainClient(c, id.String())
+		if _, err := inventoryGrainClient.Describe(&protobuf.DescribeInventoryRequest{}); err != nil {
+			slog.Warn("failed to recreate inventory grain", "error", err, "identity", id.String())
+		}
+	}
+
+	return nil
 }

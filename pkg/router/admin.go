@@ -22,6 +22,7 @@ func AdminRouter() *chi.Mux {
 	r.Group(func(r chi.Router) {
 		// r.Use(auth.EnsureValidToken())
 		r.Get("/dashboard", adminIndex)
+		r.Get("/shutdown", shutdown)
 	})
 
 	return r
@@ -63,6 +64,24 @@ func adminIndex(w http.ResponseWriter, r *http.Request) {
 	}
 
 	HTML(w, r, t, data)
+}
+
+func shutdown(w http.ResponseWriter, r *http.Request) {
+	adminGrain := protobuf.GetAdminGrainClient(gamecluster.GetC(), admin.AdminID.String())
+
+	res, err := adminGrain.Shutdown(&protobuf.ShutdownRequest{})
+	if err != nil {
+		E(w, r, http.StatusInternalServerError, err)
+
+		return
+	}
+
+	if res.Status != protobuf.Status_OK {
+		err := fmt.Errorf(res.Error)
+		E(w, r, http.StatusInternalServerError, err)
+
+		return
+	}
 }
 
 func HTML(w http.ResponseWriter, r *http.Request, t *template.Template, data any) {

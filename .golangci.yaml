@@ -92,7 +92,6 @@ linters:
     - bodyclose
     - contextcheck
     - cyclop
-    - exhaustruct
     - exportloopref
     - gocheckcompilerdirectives
     - goconst

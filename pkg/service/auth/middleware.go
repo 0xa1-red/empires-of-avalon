@@ -43,7 +43,7 @@ func EnsureValidToken() func(next http.Handler) http.Handler {
 		[]string{viper.GetString(config.Authenticator_Audience)},
 		validator.WithCustomClaims(
 			func() validator.CustomClaims {
-				return &CustomClaims{} // nolint:exhaustruct
+				return &CustomClaims{}
 			},
 		),
 		validator.WithAllowedClockSkew(time.Minute),

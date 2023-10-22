@@ -212,6 +212,7 @@ func recreateInventoryGrains(c *cluster.Cluster) error {
 
 	for id := range restorables {
 		slog.Debug("attempting to recreate inventory grain", "identity", id.String())
+
 		inventoryGrainClient := protobuf.GetInventoryGrainClient(c, id.String())
 		if _, err := inventoryGrainClient.Describe(&protobuf.DescribeInventoryRequest{}); err != nil {
 			slog.Warn("failed to recreate inventory grain", "error", err, "identity", id.String())

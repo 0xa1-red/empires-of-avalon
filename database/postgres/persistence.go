@@ -2,17 +2,12 @@ package postgres
 
 import (
 	"database/sql"
-	"time"
 
+	"github.com/0xa1-red/empires-of-avalon/database/model"
 	"github.com/0xa1-red/empires-of-avalon/pkg/service/persistence"
+	"github.com/google/uuid"
+	"golang.org/x/exp/slog"
 )
-
-type PersistenceRecord struct {
-	Kind      string    `db:"kind"`
-	Identity  string    `db:"identity"`
-	Data      []byte    `db:"data"`
-	CreatedAt time.Time `db:"created_at"`
-}
 
 func (c *Conn) Persist(item persistence.Persistable) error {
 	raw, err := item.Encode()
@@ -20,7 +15,7 @@ func (c *Conn) Persist(item persistence.Persistable) error {
 		return err
 	}
 
-	record := PersistenceRecord{
+	record := model.PersistenceRecord{
 		Kind:     item.GetKind(),
 		Identity: item.GetID(),
 		Data:     raw,
@@ -36,7 +31,7 @@ func (c *Conn) Persist(item persistence.Persistable) error {
 
 func (c *Conn) Restore(item persistence.Restorable) error { //nolint
 
-	d := PersistenceRecord{}
+	d := model.PersistenceRecord{}
 
 	if err := c.QueryRowx(`SELECT * FROM snapshots
 WHERE kind = $1 AND identity = $2
@@ -50,4 +45,32 @@ LIMIT 1`, item.GetKind(), item.GetID()).StructScan(&d); err != nil {
 	}
 
 	return item.Restore(d.Data)
+}
+
+func (c *Conn) GetRestorables(kind string) (map[uuid.UUID]model.PersistenceRecord, error) {
+	d := []model.PersistenceRecord{}
+
+	restorables := make(map[uuid.UUID]model.PersistenceRecord)
+
+	if err := c.Select(&d, `SELECT DISTINCT ON (kind, identity) kind, identity, data, created_at FROM snapshots
+WHERE kind = $1
+ORDER BY kind, identity, created_at DESC`, kind); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, persistence.ErrNoSnapshotFound
+		}
+
+		return nil, err
+	}
+
+	for _, record := range d {
+		id, err := uuid.Parse(record.Identity)
+		if err != nil {
+			slog.Warn("failed to parse actor identity", "error", err, "identity", record.Identity)
+			continue
+		}
+
+		restorables[id] = record
+	}
+
+	return restorables, nil
 }

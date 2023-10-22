@@ -1,10 +1,16 @@
 package persistence
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/0xa1-red/empires-of-avalon/database/model"
+	"github.com/google/uuid"
+)
 
 type PersistenceStore interface {
 	Persist(item Persistable) error
 	Restore(item Restorable) error
+	GetRestorables(kind string) (map[uuid.UUID]model.PersistenceRecord, error)
 }
 
 type Persistable interface {

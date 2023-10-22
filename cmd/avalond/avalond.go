@@ -122,6 +122,11 @@ func main() {
 		exit(1)
 	}
 
+	if err := recreateInventoryGrains(c); err != nil {
+		slog.Error("failed to recreate inventory grains", err)
+		exit(1)
+	}
+
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
 
@@ -192,4 +197,26 @@ func initTransport() {
 
 func initRegistry() error {
 	return registry.Init()
+}
+
+func recreateInventoryGrains(c *cluster.Cluster) error {
+	db, err := database.Get()
+	if err != nil {
+		return fmt.Errorf("failed to get database handler: %w", err)
+	}
+
+	restorables, err := db.GetRestorables("inventory")
+	if err != nil {
+		return fmt.Errorf("failed to recreate inventory grains: %w", err)
+	}
+
+	for id := range restorables {
+		slog.Debug("attempting to recreate inventory grain", "identity", id.String())
+		inventoryGrainClient := protobuf.GetInventoryGrainClient(c, id.String())
+		if _, err := inventoryGrainClient.Describe(&protobuf.DescribeInventoryRequest{}); err != nil {
+			slog.Warn("failed to recreate inventory grain", "error", err, "identity", id.String())
+		}
+	}
+
+	return nil
 }

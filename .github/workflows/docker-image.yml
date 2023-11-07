@@ -10,14 +10,10 @@ on:
   workflow_dispatch:
 
 jobs:
-
   lint:
-
-      runs-on: ubuntu-latest
+      runs-on:
+        - self-hosted
       steps:
-        -
-          name: Debug
-          run: echo {{ }}
         - 
           name: Checkout
           uses: actions/checkout@v3
@@ -35,7 +31,8 @@ jobs:
             args: --out-format=github-actions
 
   test:
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
     steps:
       - 
         name: Checkout
@@ -53,7 +50,8 @@ jobs:
   build:
     if: ${{ github.event_name == 'release' }}
 
-    runs-on: ubuntu-latest
+    runs-on:
+      - self-hosted
     needs:
       - lint
       - test
